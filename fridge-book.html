@@ -1,0 +1,1391 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>冰箱账本</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one narrow column like a fridge door list; receipt-mono for dates and quantities, colored freshness stripe per item */
+:root{
+  --bg:#eef2f1; --surface:#ffffff; --ink:#1d2a2a; --muted:#5f6f6d; --line:#d5dedc;
+  --accent:#2f7d6d; --accent-ink:#ffffff; --accent-soft:#dcefe9;
+  --fresh:#3f9b5a; --soon:#c98a12; --urgent:#cc4b37; --urgent-soft:#fbe5e1; --soon-soft:#fbf0d9;
+  --f-body:"Noto Sans SC",system-ui,-apple-system,"PingFang SC",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121817; --surface:#1b2322; --ink:#e3ecea; --muted:#93a4a1; --line:#2c3836;
+  --accent:#5cbfa7; --accent-ink:#0d1716; --accent-soft:#1f3a34;
+  --fresh:#6cc183; --soon:#e5ad42; --urgent:#ef7a66; --urgent-soft:#3a201c; --soon-soft:#352b17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121817; --surface:#1b2322; --ink:#e3ecea; --muted:#93a4a1; --line:#2c3836;
+  --accent:#5cbfa7; --accent-ink:#0d1716; --accent-soft:#1f3a34;
+  --fresh:#6cc183; --soon:#e5ad42; --urgent:#ef7a66; --urgent-soft:#3a201c; --soon-soft:#352b17; color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 40px}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:16px;width:100%}
+#p-add,#p-cook{max-width:560px}
+#p-hist{max-width:720px}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.stat b{font-family:var(--f-mono);font-size:22px;font-variant-numeric:tabular-nums}
+.stat .t-used b{color:var(--fresh)} .stat .t-toss b{color:var(--urgent)}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:999px;font-weight:500;white-space:nowrap}
+.tag.used{background:var(--accent-soft);color:var(--fresh)} .tag.tossed{background:var(--urgent-soft);color:var(--urgent)}
+.day-head{font-size:12.5px;color:var(--muted);padding:2px 2px 0}
+.cat-block .cat-head{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.cat-title{color:var(--ink);flex:1;min-width:0;font-weight:700}
+.cat-title::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:7px;vertical-align:-1px}
+.cat-block .list{border-top:3px solid var(--c)}
+.grip{border:0;background:none;color:var(--muted);cursor:grab;font-size:17px;padding:2px 4px;touch-action:none;line-height:1}
+.grip:active{cursor:grabbing}
+.swatch{width:22px;height:22px;border-radius:6px;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);background:var(--c);cursor:pointer;padding:0;flex:0 0 auto}
+.palette{display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.pchip{width:26px;height:26px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.pchip[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+.pcustom{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.pcustom input{width:38px;height:28px;padding:0;border:0;background:none;cursor:pointer}
+.drag-ghost{opacity:.35}
+.tag.low{background:var(--soon-soft);color:var(--soon)}
+.tag.buy{background:var(--urgent-soft);color:var(--urgent)}
+.tag.buy2{background:var(--accent-soft);color:var(--accent)}
+.btn[aria-pressed="true"]{background:var(--soon-soft);border-color:var(--soon);color:var(--ink)}
+.edit .sep{flex-basis:100%;height:0}
+.shop{gap:8px}
+.srow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-top:1px dashed var(--line)}
+.srow:first-of-type{border-top:0}
+.srow .n{min-width:0;overflow-wrap:anywhere}
+.shop-sub{font-size:12.5px;color:var(--muted);margin-top:4px}
+.frow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;padding:6px 0;border-top:1px dashed var(--line);font-size:14px}
+.frow:first-child{border-top:0}
+.prank{display:grid;grid-template-columns:26px 1fr auto;gap:8px;align-items:baseline;padding:6px 0;border-top:1px dashed var(--line);font-size:14px}
+.prank:first-child{border-top:0}
+.prank .n{min-width:0;overflow-wrap:anywhere}
+.bar2{height:4px;background:var(--accent-soft);border-radius:2px;margin-top:4px}
+.bar2 i{display:block;height:100%;background:var(--accent);border-radius:2px}
+details.rcpt{border-top:1px dashed var(--line);padding:7px 0}
+details.rcpt:first-child{border-top:0}
+details.rcpt summary{cursor:pointer;font-size:14px;color:var(--ink);display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+details.rcpt ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--muted);columns:2 220px;column-gap:20px}
+.src{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted)}
+.stline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:8px;border-top:1px dashed var(--line)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;min-width:0}
+.schip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:3px 10px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink);display:inline-flex;gap:4px;align-items:baseline}
+.btn.mini{padding:3px 8px;font-size:12.5px}
+.note{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.6;display:flex;flex-direction:column;gap:4px}
+.note p{margin:0;color:var(--ink)}
+.gone-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
+.grow{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:5px 6px 5px 10px;border-radius:10px;background:var(--bg);border:1px dashed var(--line);color:var(--muted);font-size:13.5px;min-width:0}
+.grow .n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grow .btn{padding:3px 9px;font-size:12.5px;flex:0 0 auto}
+.rrow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:7px 0;border-top:1px dashed var(--line);font-size:14px}
+.rrow:first-child{border-top:0}
+.rrow .n{min-width:0;overflow-wrap:anywhere}
+.qop.season{background:var(--soon-soft);color:var(--soon)}
+.qop.new{background:var(--accent-soft);color:var(--accent)}
+.schip:hover{border-color:var(--accent)}
+.schip.out{background:var(--urgent-soft);border-color:var(--urgent);color:var(--urgent);font-weight:500}
+.schip .x{color:var(--muted);font-size:12px;padding-left:2px}
+.qrow{display:grid;grid-template-columns:auto 1fr 30px;gap:8px;align-items:center;padding:6px 0;border-top:1px dashed var(--line);font-size:14px}
+.qrow .n{min-width:0;overflow-wrap:anywhere}
+.qop{font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);white-space:nowrap}
+.qop.need{background:var(--urgent-soft);color:var(--urgent)}
+.qop.done{background:var(--bg);color:var(--muted)}
+.frow .n{min-width:0;overflow-wrap:anywhere}
+.col:empty{min-height:90px;border:1.5px dashed var(--line);border-radius:12px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+@media (max-width:680px){.cols{grid-template-columns:1fr}}
+h1{font-size:22px;margin:0;letter-spacing:.02em}
+h2{font-size:13px;margin:0;color:var(--muted);font-weight:500;letter-spacing:.06em}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.de{color:var(--muted);font-size:12.5px}
+header{display:flex;flex-direction:column;gap:6px}
+.summary{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border-radius:999px;padding:3px 10px;font-size:13px;background:var(--surface);border:1px solid var(--line)}
+.chip.urgent{background:var(--urgent-soft);border-color:transparent;color:var(--urgent);font-weight:500}
+.chip.soon{background:var(--soon-soft);border-color:transparent;color:var(--soon);font-weight:500}
+nav{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+nav button{border:0;background:none;padding:9px 4px;border-radius:9px;font:inherit;font-size:14px;color:var(--muted);cursor:pointer}
+nav button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);font-weight:500}
+@media (max-width:560px){nav .nde{display:none}}
+#p-deals{max-width:720px}
+.deals-intro{font-size:12.5px;color:var(--muted);margin:0}
+.dsec-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+button{font-family:inherit}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.cat{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px 10px 14px;display:flex;flex-direction:column;gap:6px;text-align:left;cursor:pointer;font:inherit;color:var(--ink);overflow:hidden;min-width:0}
+.cat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--fresh)}
+.cat.urgent::before{background:var(--urgent)} .cat.soon::before{background:var(--soon)}
+.cat[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cat-top{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.cat-name{font-weight:700;font-size:15px}
+.cat-count{font-size:13px;color:var(--muted)}
+.bar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--line)}
+.bar i{display:block;height:100%}
+.cat-next{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat.urgent .cat-next b{color:var(--urgent)} .cat.soon .cat-next b{color:var(--soon)} .cat.fresh .cat-next b{color:var(--fresh)}
+.filterbar{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted)}
+.group{display:flex;flex-direction:column;gap:8px}
+.group-head{display:flex;justify-content:space-between;align-items:baseline}
+.list{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.item{display:grid;grid-template-columns:4px 1fr auto;gap:0 12px;border-top:1px solid var(--line);align-items:center}
+.item:first-child{border-top:0}
+.stripe{align-self:stretch;background:var(--fresh)}
+.item.urgent .stripe{background:var(--urgent)} .item.soon .stripe{background:var(--soon)}
+.item-main{padding:10px 0;min-width:0;display:flex;flex-direction:column;gap:1px;cursor:pointer}
+.item-name{font-weight:500;overflow-wrap:anywhere}
+.item-meta{font-size:12px;color:var(--muted)}
+.left{font-size:12px;font-weight:600}
+.item.urgent .left{color:var(--urgent)} .item.soon .left{color:var(--soon)} .item.fresh .left{color:var(--fresh)}
+.acts{display:flex;gap:6px;padding-right:10px}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:7px 11px;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+.btn.ghost{border-color:transparent;color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:default}
+.edit{grid-column:2 / 4;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 10px 10px 0;font-size:13px;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.empty{color:var(--muted);text-align:center;padding:24px 12px;font-size:14px}
+textarea,input,select{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;box-sizing:border-box}
+textarea{min-height:84px;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row > *{flex:1 1 auto}
+.file{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--accent);border-radius:12px;padding:18px;color:var(--accent);font-weight:500;cursor:pointer;text-align:center}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.status{font-size:13px;color:var(--muted)}
+.status.err{color:var(--urgent)}
+.preview{display:flex;flex-direction:column;gap:6px}
+.prow{display:grid;grid-template-columns:1fr 70px 30px;gap:8px;align-items:center;font-size:14px;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.prow .n{min-width:0}
+.prow input{padding:5px 6px;font-size:13px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:500}
+.plan-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.plan-date{font-weight:700;font-size:15px}
+.plan-dish{border-top:1px dashed var(--line);padding-top:8px;display:flex;flex-direction:column;gap:6px}
+.plan-dish:first-of-type{border-top:0;padding-top:0}
+.ings{display:flex;flex-wrap:wrap;gap:5px}
+.ings span{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--accent-soft)}
+.ings span.need{background:var(--urgent-soft);color:var(--urgent);font-weight:500}
+.ings span.ok{background:var(--accent-soft);color:var(--fresh)}
+.plan-buy{background:var(--bg);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.plan-buy .srow{border-top:1px dashed var(--line)}
+.stock-head{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.stock-add{padding-top:6px}
+.drow{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:6px 0;border-top:1px dashed var(--line);font-size:14px}
+.drow:first-of-type{border-top:0}
+.drow .n{min-width:0;overflow-wrap:anywhere}
+.drow .why{grid-column:1 / -1;font-size:12px;color:var(--muted);margin-top:-2px}
+.drow .off{color:var(--fresh);font-weight:600}
+.deal-list{display:flex;flex-direction:column;gap:4px;padding:0 0 6px}
+.deal{font-size:12.5px;border-radius:8px;padding:5px 9px;line-height:1.5;overflow-wrap:anywhere}
+.deal.hit{background:var(--accent-soft);color:var(--ink)}
+.deal.hit > b:first-child{color:var(--fresh)}
+.deal.near{background:var(--bg);color:var(--muted);border:1px dashed var(--line)}
+.deal a{color:var(--accent)}
+.deal-none{font-size:12px;color:var(--muted);padding:0 0 6px}
+.dlist{display:flex;flex-direction:column}
+.u0{color:var(--urgent);font-weight:600}
+.u1{color:var(--soon);font-weight:600}
+.dl{display:grid;grid-template-columns:1fr auto;gap:0 10px;align-items:center;padding:7px 0;border-top:1px dashed var(--line)}
+.dl:first-child{border-top:0}
+.dl .dmain{min-width:0;display:flex;flex-wrap:wrap;gap:0 8px;align-items:baseline;font-size:14px}
+.dl .dmain a{color:var(--ink);text-decoration:none;font-weight:500}
+.dl .dmain s{color:var(--muted);font-size:12px}
+.dl .doff{font-size:12px;color:var(--muted)}
+.dl .dsub{grid-column:1;font-size:12px;color:var(--muted)}
+.dl .dacts{grid-row:1 / span 2;grid-column:2;display:flex;gap:4px;align-items:center}
+.dundo{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted)}
+.recipe h3{margin:0;font-size:17px}
+.recipe ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.uses{display:flex;flex-wrap:wrap;gap:5px}
+.uses span{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--accent-soft)}
+.uses span.u{background:var(--urgent-soft);color:var(--urgent)}
+.kid{font-size:13px;background:var(--bg);border-radius:8px;padding:8px 10px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+@media (prefers-reduced-motion:no-preference){.item{transition:opacity .2s}}
+/* 紧凑模式：一眼看完 */
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+body{font-size:14px;padding-block:8px 24px}
+.wrap{gap:10px}
+#p-stock{gap:10px!important}
+h1{font-size:18px}
+h2{font-size:12px}
+header{gap:4px}
+.summary{gap:5px}
+.chip{padding:1px 8px;font-size:12px}
+nav{padding:3px;gap:3px;border-radius:10px}
+nav button{padding:6px 4px;font-size:13px;border-radius:8px}
+.card{padding:9px 12px;gap:7px;border-radius:10px}
+.group{gap:4px}
+.cols{gap:10px}
+.col{gap:10px}
+.list{border-radius:10px}
+.item{grid-template-columns:3px 1fr auto;gap:0 10px}
+.item-main{padding:5px 0;flex-direction:row;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:0}
+.item-name{font-size:14px}
+.item-meta{font-size:11.5px}
+.acts{gap:4px;padding-right:6px}
+.btn{padding:4px 9px;font-size:12.5px;border-radius:8px}
+.edit{padding:0 6px 6px 0;gap:4px;font-size:12px}
+.tag{font-size:11px;padding:0 6px}
+.cat-block .list{border-top-width:2px}
+.cat-title{font-size:14px}
+.cat-title::before{width:8px;height:8px;margin-right:6px}
+.swatch{width:16px;height:16px;border-radius:4px}
+.grip{font-size:15px;padding:0 2px}
+.srow{padding:3px 0;gap:6px}
+.shop{gap:4px}
+.stline{padding-top:6px;gap:5px}
+.schip{padding:2px 9px;font-size:12.5px}
+.gone-list{gap:4px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.grow{padding:2px 4px 2px 8px;font-size:13px}
+.grow .btn{padding:2px 7px;font-size:12px}
+.rrow{padding:4px 0}
+input,textarea,select{padding:6px 9px;font-size:14px}
+textarea{min-height:64px}
+.note{padding:9px 12px;font-size:13px;line-height:1.5}
+.stat div{padding:7px 10px}
+.stat b{font-size:18px}
+.frow,.prank{padding:4px 0;font-size:13px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="hrow"><h1>冰箱账本 <span class="de" style="font-size:13px;font-weight:400">· Vorratsbuch</span></h1><button class="btn mini" id="copyBtn" title="复制今日清单，发家庭群">复制清单</button></div>
+    <div class="summary" id="summary"><span class="chip">正在读取库存…</span></div>
+    <span class="status" id="copyStatus" hidden></span>
+    <textarea id="copyText" readonly hidden aria-label="今日清单文字"></textarea>
+  </header>
+
+  <nav role="tablist">
+    <button role="tab" id="tab-stock" aria-selected="true" data-tab="stock">库存<span class="nde"> Vorrat</span></button>
+    <button role="tab" id="tab-deals" aria-selected="false" data-tab="deals">打折<span class="nde"> Aktionen</span></button>
+    <button role="tab" id="tab-add" aria-selected="false" data-tab="add">添加<span class="nde"> Einkauf</span></button>
+    <button role="tab" id="tab-cook" aria-selected="false" data-tab="cook">菜谱<span class="nde"> Rezepte</span></button>
+    <button role="tab" id="tab-hist" aria-selected="false" data-tab="hist">历史<span class="nde"> Verlauf</span></button>
+  </nav>
+
+  <!-- 库存 -->
+  <section id="p-stock" class="wrap" style="gap:18px">
+    <div class="card" id="quickCard">
+      <div class="row">
+        <input id="quick" placeholder="一句话记录：牛奶没了，买了番茄 1 斤，要买鸡蛋" style="flex:1 1 220px" aria-label="一句话记录">
+        <button class="btn primary" id="quickBtn" style="flex:0 0 auto">记下</button>
+      </div>
+      <div class="status" id="quickStatus"></div>
+      <div id="quickPreview" hidden></div>
+      <div class="stline">
+        <span class="status" title="常备品 Grundvorrat：没了点一下就进购物清单">常备 · 没了点</span>
+        <div class="chips" id="staples"></div>
+        <button class="btn ghost mini" id="stapleEdit">编辑</button>
+        <button class="btn ghost mini" id="stockupOpen" title="打折才买的固定商品，在「打折」页">打折就囤 →</button>
+      </div>
+      <div class="row" id="stapleAddRow" hidden><input id="stapleNew" placeholder="加一个常备品，如 面包" style="flex:1 1 160px"><button class="btn" id="stapleAdd" style="flex:0 0 auto">加入</button></div>
+    </div>
+    <div id="shop" hidden></div>
+    <div id="stock"><div class="empty">库存会显示在这里：按"还剩几天"排序，快过期的排最前。<br>去「添加」拍一张超市收据开始。</div></div>
+    <div class="card" id="againCard">
+      <div class="group-head" style="align-items:center"><h2>补货 Nachkaufen · 最近吃完的</h2><button class="btn mini" id="recBtn">推荐买什么</button></div>
+      <div class="gone-list" id="againList"></div>
+      <div class="status" id="recStatus"></div>
+      <div id="recs"></div>
+    </div>
+  </section>
+
+  <!-- 打折 -->
+  <section id="p-deals" class="wrap" hidden>
+    <p class="deals-intro">每周二、周四晚上自动查 Migros、Coop、Denner 的促销（Aktionen），结果放在这里。</p>
+    <div class="card" id="stockupCard"></div>
+    <div class="card" id="weekDeals"></div>
+  </section>
+
+  <!-- 历史 -->
+  <section id="p-hist" class="wrap" hidden>
+    <div class="card" id="feedCard" hidden>
+      <h2>家人动态 Aktivität</h2>
+      <div id="feed"></div>
+    </div>
+    <div class="card" id="purchCard" hidden>
+      <div class="group-head" style="align-items:baseline"><h2>购买记录 Einkäufe</h2><span class="status" id="purchMeta"></span></div>
+      <div class="seg" id="purchMode">
+        <button aria-pressed="true" data-v="rank">常买排行</button>
+        <button aria-pressed="false" data-v="list">按收据</button>
+      </div>
+      <div id="purch"></div>
+    </div>
+    <div class="stat" id="histStat"></div>
+    <div class="seg" id="histFilter">
+      <button aria-pressed="true" data-v="all">全部</button>
+      <button aria-pressed="false" data-v="used">吃完 gegessen</button>
+      <button aria-pressed="false" data-v="tossed">扔掉 weggeworfen</button>
+    </div>
+    <div id="hist" class="wrap" style="gap:12px"><div class="empty">在库存里点「✓ 吃完」或「扔掉」后，记录会出现在这里。</div></div>
+  </section>
+
+  <!-- 添加 -->
+  <section id="p-add" class="wrap" hidden>
+    <div class="note">
+      <b>刷了会员卡就不用记</b>
+      <p>在 Migros 刷 Cumulus、在 Coop 刷 Supercard，每天晚上约 21:00 会自动入库，购物清单上买到的也会自动划掉，不需要再拍照或手动添加。</p>
+      <p>在其他地方买的（菜市场、Lidl、亚洲超市…），或者忘了刷卡：在下面拍收据上传，或者直接写买了什么。</p>
+    </div>
+    <div class="card" id="aiCard">
+      <h2>拍收据 Kassenzettel</h2>
+      <label class="file" for="photo"><input type="file" id="photo" accept="image/*">📷 选收据照片，自动识别</label>
+      <h2 style="margin-top:4px">或者直接写 Freitext</h2>
+      <textarea id="freetext" placeholder="例如：西兰花 2个、牛奶 1L、三文鱼 300g、草莓一盒"></textarea>
+      <div class="row">
+        <label class="status" for="buyDate" style="flex:0 0 auto">购买日期</label>
+        <input type="date" id="buyDate" style="flex:1 1 140px">
+        <button class="btn primary" id="parseBtn" style="flex:0 0 auto">识别</button>
+      </div>
+      <div class="status" id="aiStatus"></div>
+      <div class="preview" id="preview" hidden></div>
+      <div class="row" id="saveRow" hidden>
+        <button class="btn primary" id="saveBtn">放进冰箱</button>
+        <button class="btn ghost" id="clearBtn" style="flex:0 0 auto">清空</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>手动加一件 Einzeln</h2>
+      <div class="row">
+        <input id="mName" placeholder="名称，如 菠菜" style="flex:2 1 140px">
+        <input id="mQty" placeholder="数量" style="flex:1 1 70px">
+      </div>
+      <div class="row">
+        <label class="status" for="mDays" style="flex:0 0 auto">能放几天</label>
+        <input id="mDays" type="number" min="1" value="5" style="flex:0 1 80px">
+        <select id="mCat" style="flex:1 1 110px">
+          <option>蔬菜</option><option>水果</option><option>肉禽鱼</option><option>乳制品</option><option>蛋</option><option>豆制品</option><option>零食</option><option>主食干货</option><option>饮品</option><option>冷冻</option><option>其他</option>
+        </select>
+        <button class="btn primary" id="mAdd" style="flex:0 0 auto">添加</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 菜谱 -->
+  <section id="p-cook" class="wrap" hidden>
+    <div class="card" id="planCard">
+      <h2>做菜计划 Menüplan</h2>
+      <div class="row">
+        <label class="status" for="planDate" style="flex:0 0 auto">哪天做</label>
+        <input type="date" id="planDate" style="flex:1 1 140px">
+        <select id="planMeal" style="flex:0 1 110px" aria-label="哪一顿">
+          <option>晚饭</option><option>午饭</option><option>早饭</option><option>早午餐</option>
+        </select>
+      </div>
+      <input id="planDishes" placeholder="想做的菜，如 红烧排骨、清炒西兰花（空着就按库存推荐 2 道）" aria-label="想做的菜">
+      <div class="hrow"><span class="status" id="kidsLine"></span><button class="btn ghost mini" id="kidsEdit" style="flex:0 0 auto">改生日</button></div>
+      <div id="kidsForm" class="plan-buy" hidden></div>
+      <button class="btn primary" id="planBtn">生成菜谱 + 要买的东西</button>
+      <div class="status" id="planStatus"></div>
+    </div>
+    <div id="plans" class="wrap" style="gap:12px"></div>
+
+    <div class="card">
+      <h2>今天想做什么</h2>
+      <div class="seg" id="mode">
+        <button aria-pressed="true" data-v="家常晚饭，全家一起吃">家常晚饭</button>
+        <button aria-pressed="false" data-v="15 分钟内做好的快手菜">快手 15 分钟</button>
+        <button aria-pressed="false" data-v="按两个孩子现在的月龄做的宝宝餐/辅食/小食">宝宝餐</button>
+        <button aria-pressed="false" data-v="周末早午餐">周末早午餐</button>
+      </div>
+      <input id="extra" placeholder="补充（可选）：比如 不想开烤箱、想吃中餐">
+      <button class="btn primary" id="cookBtn">用快过期的食材推荐 3 道菜</button>
+      <div class="status" id="cookStatus"></div>
+    </div>
+    <div id="recipes" class="wrap" style="gap:12px"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2,"0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const parseIso = s => { const [y,m,d] = String(s).split("-").map(Number); return new Date(y, m-1, d); };
+const addDays = (s, n) => { const d = parseIso(s); d.setDate(d.getDate()+n); return iso(d); };
+const daysLeft = it => Math.round((parseIso(it.expires) - today())/86400000);
+const short = s => { const d = parseIso(s); return `${pad(d.getMonth()+1)}/${pad(d.getDate())}`; };
+const level = n => n <= 1 ? "urgent" : n <= 3 ? "soon" : "fresh";
+const untilHtml = u => { const n = Math.round((parseIso(u) - today()) / 86400000); return n <= 0 ? `<span class="u0">今天截止</span>` : n === 1 ? `<span class="u1">明天截止</span>` : `到 <span class="mono">${short(u)}</span>`; };
+const leftText = n => n < 0 ? `过期 ${-n} 天` : n === 0 ? "今天到期" : n === 1 ? "明天到期" : `还剩 ${n} 天`;
+
+let db = null, sample = null, items = [], openEdit = null, parsed = [], catFilter = null;
+const CATS = {"肉禽鱼":"Fleisch & Fisch","蔬菜":"Gemüse","水果":"Obst","乳制品":"Milchprodukte","蛋":"Eier","豆制品":"Tofu & Soja","零食":"Snacks","主食干货":"Vorrat","饮品":"Getränke","冷冻":"Tiefkühl","其他":"Sonstiges"};
+const DEFAULT_COLORS = {"肉禽鱼":"#c0504d","蔬菜":"#4f9a5a","水果":"#e08a2e","乳制品":"#4a78c2","蛋":"#d1a514","豆制品":"#9b7b55","零食":"#b05f8a","主食干货":"#7d6b57","饮品":"#8a5cc2","冷冻":"#2f8f9d","其他":"#7f8a88"};
+const PRESETS = ["#c0504d","#e08a2e","#d1a514","#4f9a5a","#2f8f9d","#4a78c2","#8a5cc2","#b05f8a","#9b7b55","#7f8a88"];
+let user = null, myId = null, names = {}, logs = [], resolving = false;
+const nm = id => !id ? "有人" : id === myId ? "我" : (names[id]?.name || "家人");
+function logEvent(e){ if (db) db.collection("log").add({ ...e, by: myId || "", at: Date.now() }).catch(() => {}) }
+function resolveNames(){
+  if (!user || resolving) return;
+  const ids = new Set();
+  for (const i of items) for (const k of ["addedBy","buyBy","doneBy"]) if (i[k]) ids.add(i[k]);
+  for (const l of logs) if (l.by) ids.add(l.by);
+  for (const d of shopDocs) if (d.by) ids.add(d.by);
+  const missing = [...ids].filter(id => !(id in names));
+  if (!missing.length) return;
+  resolving = true;
+  user.profiles(missing).then(ps => { Object.assign(names, ps); for (const id of missing) names[id] ||= {name:""}; resolving = false; render() }).catch(() => { resolving = false });
+}
+let feedAll = false;
+function renderFeed(){
+  // 只看最近 7 天；同一天同一个人（或自动导入）的新买合并成一条
+  const weekAgo = Date.now() - 7 * 86400000, rows = [], idx = {};
+  for (const l of logs){
+    if (!(l.type === "added" || l.type === "buy") || !(l.at >= weekAgo)) continue;
+    if (l.type === "added"){
+      const key = iso(new Date(l.at)) + "|" + (l.auto ? "auto" : (l.by || ""));
+      const r = idx[key];
+      if (r){ for (const n of (l.names || [])) if (!r.names.includes(n)) r.names.push(n); if (l.source && !r.srcs.includes(l.source)) r.srcs.push(l.source); continue; }
+      rows.push(idx[key] = { type:"added", at:l.at, by:l.by, auto:l.auto, names:[...(l.names || [])], srcs: l.source ? [l.source] : [] });
+    } else rows.push(l);
+  }
+  const shown = feedAll ? rows : rows.slice(0, 5);
+  $("#feedCard").hidden = !rows.length;
+  const tm = t => { const d = new Date(t); return `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}` };
+  const say = l => l.type === "added"
+    ? `新买了 ${l.names.length} 样：${esc(l.names.join("、"))}`
+    : `说要买 ${esc(l.name || "")}`;
+  $("#feed").innerHTML = shown.map(l => `<div class="frow"><span class="mono status">${tm(l.at)}</span><span class="n"><b>${l.auto ? "自动导入" + (l.srcs?.length ? " · " + esc(l.srcs.join("、")) : "") : esc(nm(l.by))}</b> ${say(l)}</span></div>`).join("")
+    + (rows.length > 5 ? `<button class="btn ghost mini" id="feedMore" style="margin-top:4px">${feedAll ? "收起" : `更多（${rows.length - 5}）`}</button>` : "");
+  const fm = $("#feedMore"); if (fm) fm.onclick = () => { feedAll = !feedAll; renderFeed(); };
+  const last = rows[0];
+  if (last && Date.now() - last.at < 86400000 && last.auto)
+    $("#summary").insertAdjacentHTML("beforeend", `<span class="chip">自动导入了 ${last.names.length} 样</span>`);
+  else if (last && Date.now() - last.at < 86400000 && last.by && last.by !== myId)
+    $("#summary").insertAdjacentHTML("beforeend", `<span class="chip">${esc(nm(last.by))} ${last.type === "added" ? `新买了 ${last.names.length} 样` : `说要买 ${esc(last.name || "")}`}</span>`);
+}
+let staples = [{zh:"牛奶",de:"Milch"},{zh:"鸡蛋",de:"Eier"},{zh:"面包",de:"Brot"},{zh:"香蕉",de:"Bananen"},{zh:"酸奶",de:"Joghurt"},{zh:"咖啡豆",de:"Kaffee"}];
+let plans = [], kids = [], stockup = [], stockupEditing = false, stockupEditId = null, weekDeals = null, dealsAll = false;
+const STORES = ["哪家都行","Migros","Coop","Denner","Lidl","Aldi","亚洲超市","网上"];
+const storeOpts = cur => [...STORES, ...(cur && !STORES.includes(cur) ? [cur] : [])].map(s => `<option${s === (cur || "哪家都行") ? " selected" : ""}>${esc(s)}</option>`).join("");
+const suEditRow = d => `<div class="row stock-add" style="border-top:1px dashed var(--line);padding:6px 0">
+  <input id="seName" value="${esc(d.zh || "")}" placeholder="名称" style="flex:2 1 110px" aria-label="名称">
+  <input id="seWant" value="${esc(d.want || "")}" placeholder="牌子/规格（可空）" style="flex:2 1 110px" aria-label="牌子或规格">
+  <input id="seDeal" value="${esc(d.deal || "")}" placeholder="打折条件，如 2 件 6 折" style="flex:2 1 110px" aria-label="打折条件">
+  <select id="seStore" style="flex:1 1 100px" aria-label="哪家店">${storeOpts(d.store)}</select>
+  <button class="btn primary" data-stock-save="${d.id}" style="flex:0 0 auto">保存</button>
+  <button class="btn ghost" data-stock-cancel="1" style="flex:0 0 auto">取消</button></div>`;
+const monthsAt = (born, date) => { const b = parseIso(born), d = parseIso(date); let m = (d.getFullYear() - b.getFullYear()) * 12 + d.getMonth() - b.getMonth(); if (d.getDate() < b.getDate()) m--; return Math.max(0, m); };
+const ageText = m => m < 24 ? `${m} 个月` : `${Math.floor(m / 12)} 岁${m % 12 ? ` ${m % 12} 个月` : ""}`;
+const kidList = date => kids.filter(k => k.born).map(k => `${k.name || "孩子"}（${ageText(monthsAt(k.born, date))}）`);
+const familyText = date => kidList(date).length ? `两个大人 + ${kidList(date).join(" + ")}` : "两个大人 + 一个幼儿 + 一个婴儿";
+const BABY_MONTHS = 24; // 满 2 岁就和大人一起吃，不再单独说明
+const babies = date => kids.filter(k => k.born && monthsAt(k.born, date) < BABY_MONTHS).map(k => `${k.name || "宝宝"}（${ageText(monthsAt(k.born, date))}）`);
+const kidRule = date => kidList(date).length
+  ? (babies(date).length
+    ? `- 大一点的孩子和大人吃一样的，不用单独说明。只给婴儿说明：${babies(date).join("；")}。每道菜给 kids 数组，每个婴儿一项 {"name":"名字","tip":"一两句怎么给他/她这个月龄吃"}：质地（泥/碎/软块）、切法、过敏原和噎食风险按月龄判断，1 岁以下不加盐糖、不用蜂蜜；如果这道菜不适合，就说从哪一步盛出一份单独做。`
+    : `- 孩子都和大人吃一样的，不用单独说明，kids 给空数组。`)
+  : "- 家里有一个幼儿和一个婴儿，每道菜给 kids 数组 [{\"name\":\"小朋友\",\"tip\":\"怎么改成小朋友能吃的\"}]（少盐、切小、避开噎食风险）。";
+const kidHtml = r => Array.isArray(r.kids) && r.kids.length ? r.kids.map(k => `<div class="kid">👶 <b>${esc(k.name || "")}</b> ${esc(k.tip || "")}</div>`).join("") : r.kid ? `<div class="kid">👶 ${esc(r.kid)}</div>` : "";
+const kidLines = r => Array.isArray(r.kids) && r.kids.length ? r.kids.map(k => `${k.name || "小朋友"}：${k.tip || ""}`) : r.kid ? ["小朋友版：" + r.kid] : [];
+let shopDocs = [], stapleEditing = false, quickActions = [], purchases = [];
+const sameName = (a, b) => !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+const isStapleName = n => staples.find(s => sameName(s.zh, n) || sameName(s.de, n));
+function saveStaples(){ if (db) saving = saving.then(() => db.doc("settings/staples").set({ list: staples })).catch(() => {}) }
+async function addShop(zh, de, buyOn, extra = {}){
+  if (!db || shopDocs.find(d => sameName(d.zh, zh))) return;
+  await db.collection("shop").add({ zh, de: de || "", buyOn, by: myId || "", at: Date.now(), ...extra });
+  logEvent({ type:"buy", name: zh, when: buyOn });
+}
+async function clearShopFor(name){
+  if (!db) return;
+  for (const d of shopDocs.filter(x => sameName(x.zh, name))) await db.collection("shop").doc(d.id).delete().catch(() => {});
+  for (const i of items.filter(x => x.buyOn && sameName(x.zh, name))) await db.collection("items").doc(i.id).update({ buyOn:"" }).catch(() => {});
+}
+async function toggleStaple(s){
+  if (!db || !s) return;
+  const need = shopDocs.find(d => sameName(d.zh, s.zh));
+  if (need) await db.collection("shop").doc(need.id).delete().catch(() => {});
+  else await addShop(s.zh, s.de, iso(today()));
+}
+function renderStaples(){
+  $("#staples").innerHTML = staples.map((s, i) => { const need = shopDocs.find(d => sameName(d.zh, s.zh));
+    return `<button class="schip ${need ? "out" : ""}" data-staple="${i}" aria-pressed="${!!need}" title="${esc(s.de || "")}">${esc(s.zh)}${need ? " · 缺" : ""}${stapleEditing ? `<span class="x" data-staple-rm="${i}" aria-label="删除 ${esc(s.zh)}">✕</span>` : ""}</button>`; }).join("")
+    || `<span class="status">还没有常备品，点「编辑」添加</span>`;
+  $("#stapleAddRow").hidden = !stapleEditing;
+  $("#stapleEdit").textContent = stapleEditing ? "完成" : "编辑";
+}
+let layout = { left:["肉禽鱼","蔬菜"], right:["乳制品","蛋"], colors:{} };
+let dragging = false, colorOpen = null, sortables = [], saving = Promise.resolve();
+const catColor = c => layout.colors?.[c] || DEFAULT_COLORS[c] || "#7f8a88";
+const paletteHtml = c => `<div class="palette">${PRESETS.map(p => `<button class="pchip" data-set-color="${p}" data-cat-c="${esc(c)}" style="background:${p}" aria-label="颜色 ${p}" aria-pressed="${catColor(c).toLowerCase() === p}"></button>`).join("")}
+  <label class="pcustom">自定义 <input type="color" id="cc-${esc(c)}" data-custom-color="${esc(c)}" value="${catColor(c)}"></label>
+  <button class="btn ghost" data-set-color="" data-cat-c="${esc(c)}">恢复默认</button></div>`;
+function saveLayout(){
+  if (!db) return;
+  const snap = JSON.parse(JSON.stringify(layout));
+  saving = saving.then(() => db.doc("settings/layout").set(snap)).catch(() => {});
+}
+function setColor(c, v){
+  const colors = { ...(layout.colors || {}) };
+  if (v) colors[c] = v; else delete colors[c];
+  layout = { ...layout, colors }; render(); saveLayout();
+}
+function setupSortable(){
+  sortables.forEach(s => { try{ s.destroy() }catch(e){} }); sortables = [];
+  if (!window.Sortable) return;
+  document.querySelectorAll("#stock .col").forEach(el => sortables.push(Sortable.create(el, {
+    group:"cats", handle:".grip", draggable:".cat-block", animation:150, ghostClass:"drag-ghost",
+    onStart(){ dragging = true }, onEnd(){ dragging = false; readLayout() }
+  })));
+}
+function readLayout(){
+  const get = k => [...document.querySelectorAll(`#stock .col[data-col="${k}"] .cat-block`)].map(x => x.dataset.cat);
+  const left = get("left"), right = get("right"), vis = new Set([...left, ...right]);
+  layout = { ...layout,
+    left: [...left, ...(layout.left || []).filter(c => !vis.has(c))],
+    right: [...right, ...(layout.right || []).filter(c => !vis.has(c))] };
+  render(); saveLayout();
+}
+const normCat = c => ({"肉蛋":"肉禽鱼","干货":"主食干货","肉":"肉禽鱼","冷冻食品":"冷冻","冷冻品":"冷冻"})[c] || (CATS[c] ? c : "其他");
+$("#buyDate").value = iso(today());
+
+// tabs
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(t){
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  ["stock","deals","add","cook","hist"].forEach(k => $("#p-"+k).hidden = k !== t);
+  $("#copyBtn").hidden = t !== "stock";
+  if (t !== "stock"){ $("#copyText").hidden = true; $("#copyStatus").hidden = true; }
+  try{ localStorage.setItem("tab", t) }catch(e){}
+}
+try{ const t = localStorage.getItem("tab"); if (t) showTab(t) }catch(e){}
+
+// ---------- render ----------
+function render(){
+  if (dragging) return;
+  const active = items.filter(i => i.status === "in").sort((a,b) => daysLeft(a) - daysLeft(b) || (a.zh||"").localeCompare(b.zh||""));
+  const gone = items.filter(i => i.status === "used" || i.status === "tossed")
+    .sort((a,b) => (b.doneAt||"").localeCompare(a.doneAt||"") || (b.doneTs||0) - (a.doneTs||0));
+  const u = active.filter(i => daysLeft(i) <= 1).length, s = active.filter(i => { const n = daysLeft(i); return n > 1 && n <= 3 }).length;
+  $("#summary").innerHTML = `<span class="chip mono">${active.length} 件在库</span>`
+    + (u ? `<span class="chip urgent">${u} 件今明两天要吃</span>` : "")
+    + (s ? `<span class="chip soon">${s} 件 3 天内到期</span>` : "");
+  // 购物清单：标了「需要买」的商品（吃完的也算）+ 常备品/推荐加入的
+  const tdy = iso(today());
+  renderStaples();
+  const shop = [...items.filter(i => i.buyOn).map(i => ({ ...i, kind:"item" })), ...shopDocs.filter(d => d.buyOn).map(d => ({ ...d, kind:"shop" }))]
+    .sort((a,b) => a.buyOn.localeCompare(b.buyOn));
+  if (shop.length) $("#summary").insertAdjacentHTML("beforeend", `<span class="chip urgent">购物清单 ${shop.length} 样</span>`);
+  $("#shop").hidden = !shop.length;
+  const srow = i => i.kind === "shop" ? `<div class="srow"><span class="n">${esc(i.zh)} <span class="de">${esc(i.de || "")}</span>${i.forPlan ? ` <span class="tag buy2">${esc(i.forPlan)}</span>` : ""}${isStapleName(i.zh) ? ` <span class="tag" style="background:var(--bg);color:var(--muted)">常备</span>` : ""}</span>
+    <span class="status"><span class="mono">${short(i.buyOn)}</span>${i.by ? " · " + esc(nm(i.by)) + "说的" : ""}</span>
+    <button class="btn" data-shop-done="${i.id}">✓ 买到了</button></div>` : `<div class="srow"><span class="n">${esc(i.zh || i.name)} <span class="de">${esc(i.de || "")}</span>${i.low && i.status === "in" ? ` <span class="tag low">快吃完</span>` : ""}${i.status !== "in" ? ` <span class="tag" style="background:var(--bg);color:var(--muted)">已吃完</span>` : ""}</span>
+    <span class="status"><span class="mono">${short(i.buyOn)}</span>${i.buyBy ? " · " + esc(nm(i.buyBy)) + "说的" : ""}</span>
+    <button class="btn" data-act="buyDone" data-id="${i.id}">✓ 买到了</button></div>`;
+  const liveHit = d => (d.dealNow?.found || []).some(f => f.match && (!f.until || f.until >= tdy));
+  const stockRows = [...stockup].sort((a,b) => liveHit(b) - liveHit(a) || (a.zh || "").localeCompare(b.zh || "", "zh"));
+  const dealHtml = d => {
+    const dn = d.dealNow; if (!dn || !Array.isArray(dn.found) || !dn.found.length) return dn?.checkedAt ? `<div class="deal-none">${short(dn.checkedAt)} 查过：这周没有合适的折扣</div>` : "";
+    const live = dn.found.filter(f => !f.until || f.until >= tdy); if (!live.length) return "";
+    return `<div class="deal-list">${live.map(f => `<div class="deal ${f.match ? "hit" : "near"}">
+      <b>${f.match ? "本周有折扣" : "有折扣，不够条件"}</b> ${esc(f.shop || "")}${f.scope ? ` <span class="src">${esc(f.scope)}</span>` : ""} · ${esc(f.product || "")} · <b>${esc(f.offer || "")}</b>${f.until ? ` · ${untilHtml(f.until)}` : ""}${f.url ? ` · <a href="${esc(f.url)}" target="_blank" rel="noopener">看看</a>` : ""}${f.note ? `<div class="status">${esc(f.note)}</div>` : ""}</div>`).join("")}</div>`;
+  };
+  const sbRow = d => stockupEditing && stockupEditId === d.id ? suEditRow(d) : `<div class="srow"><span class="n">${esc(d.zh)} <span class="de">${esc(d.de || "")}</span>${d.want ? ` <span class="tag buy2">${esc(d.want)}</span>` : ""} <span class="tag low">${esc(d.deal || "打折")}</span>${d.store && d.store !== "哪家都行" ? ` <span class="src">${esc(d.store)}</span>` : ""}</span>
+    <span class="status">${d.lastBought ? "上次囤 <span class=\"mono\">" + short(d.lastBought) + "</span>" : "还没囤过"}</span>
+    ${stockupEditing ? `<span class="acts" style="padding:0"><button class="btn" data-stock-edit="${d.id}">改</button><button class="btn ghost" data-stock-rm="${d.id}">删除</button></span>` : `<button class="btn" data-stock-done="${d.id}">✓ 囤了</button>`}</div>${stockupEditing ? "" : dealHtml(d)}`;
+  const hits = stockup.filter(d => (d.dealNow?.found || []).some(f => f.match && (!f.until || f.until >= tdy)));
+  if (hits.length) $("#summary").insertAdjacentHTML("beforeend", `<span class="chip soon">本周打折：${esc(hits.map(d => d.zh).join("、"))}</span>`);
+  const keep = ["suName","suWant","suDeal","suStore","seName","seWant","seDeal","seStore"].map(id => [id, $("#" + id)?.value]), focused = document.activeElement?.id;
+  $("#shop").innerHTML = shop.length ? `<div class="card shop">
+    <div class="group-head"><h2>购物清单 Einkaufsliste</h2><span class="status mono">${shop.length}</span></div>
+    ${shop.map(srow).join("")}
+  </div>` : "";
+  const dealTab = $("#tab-deals"); if (dealTab) dealTab.innerHTML = `打折<span class="nde"> Aktionen</span>${hits.length ? ` <span class="tag low" title="打折就囤清单里，本周有 ${hits.length} 样达到你的折扣条件">${hits.length} 样到条件</span>` : ""}`;
+  $("#stockupCard").innerHTML = `<div class="dsec-head"><h2>打折就囤 Bei Aktion${hits.length ? ` · <span style="color:var(--fresh)">本周 ${hits.length} 样达到条件</span>` : ""}</h2><button class="btn ghost mini" id="stockupEdit">${stockupEditing ? "完成" : "编辑"}</button></div>
+    ${stockRows.length ? stockRows.map(sbRow).join("") : `<div class="status">固定买、但只在打折时买的东西放这里，比如 咖啡豆 · 2 件 6 折。</div>`}
+    ${stockupEditing ? `<div class="row stock-add">
+      <input id="suName" placeholder="名称，如 咖啡豆" style="flex:2 1 120px" aria-label="名称">
+      <input id="suWant" placeholder="牌子/规格（可空），如 Chicco d'Oro" style="flex:2 1 120px" aria-label="牌子或规格">
+      <input id="suDeal" placeholder="打折条件，如 2 件 6 折" style="flex:2 1 120px" aria-label="打折条件">
+      <select id="suStore" style="flex:1 1 100px" aria-label="哪家店"><option>哪家都行</option><option>Migros</option><option>Coop</option><option>Denner</option><option>Lidl</option><option>Aldi</option><option>亚洲超市</option><option>网上</option></select>
+      <button class="btn primary" id="suAdd" style="flex:0 0 auto">加入</button></div>` : ""}`;
+  for (const [id, v] of keep) if (v != null && $("#" + id)) $("#" + id).value = v;
+  if (focused && /^s[ue][A-Z]/.test(focused)) $("#" + focused)?.focus();
+
+  if (!active.length){
+    $("#stock").innerHTML = `<div class="empty">冰箱是空的。去「添加」拍一张收据，或手动加一件。</div>`;
+  } else {
+    // 按分类聚合，分类按最早到期排序（同天按紧急件数多的在前）
+    const map = {};
+    for (const i of active){ const c = normCat(i.cat); (map[c] ||= []).push(i) }
+    const cats = Object.entries(map).map(([c, list]) => {
+      const ds = list.map(daysLeft);
+      return { c, list, min: Math.min(...ds),
+        u: ds.filter(n => n <= 1).length, s: ds.filter(n => n > 1 && n <= 3).length, f: ds.filter(n => n > 3).length };
+    }).sort((a,b) => a.min - b.min || (b.u + b.s) - (a.u + a.s) || b.list.length - a.list.length);
+    // 分类位置来自保存的 layout；没放过位置的新分类按最早到期接在右列后面
+    const byName = Object.fromEntries(cats.map(g => [g.c, g]));
+    const placed = new Set([...(layout.left || []), ...(layout.right || [])]);
+    const L = (layout.left || []).filter(c => byName[c]);
+    const R = [...(layout.right || []).filter(c => byName[c]), ...cats.filter(g => !placed.has(g.c)).map(g => g.c)];
+    const block = c => { const g = byName[c]; return `<div class="group cat-block" data-cat="${esc(c)}" style="--c:${catColor(c)}">
+        <div class="group-head cat-head">
+          <button class="grip" aria-label="拖动 ${esc(c)}" title="按住拖动">⠿</button>
+          <span class="cat-title">${esc(c)} <span class="de" style="font-weight:400">${CATS[c]}</span></span>
+          <span class="status mono">${g.list.length}</span>
+          <button class="swatch" data-color-open="${esc(c)}" aria-label="改 ${esc(c)} 的颜色" title="改颜色"></button>
+        </div>
+        ${colorOpen === c ? paletteHtml(c) : ""}
+        <div class="list">${g.list.map(rowHtml).join("")}</div></div>`; };
+    $("#stock").innerHTML = `<div class="cols"><div class="col" data-col="left">${L.map(block).join("")}</div><div class="col" data-col="right">${R.map(block).join("")}</div></div>`;
+    setupSortable();
+  }
+  renderHist(gone);
+  renderPurch();
+  renderAgain();
+  renderFeed();
+  renderPlans();
+  renderDeals();
+  resolveNames();
+}
+// ---------- 补货：最近吃完 + 推荐 ----------
+let recs = [];
+const buyBtn = i => `<button class="btn" data-act="buyCycle" data-id="${i.id}" aria-pressed="${!!i.buyOn}" title="${i.buyOn ? "点一下从购物清单去掉" : "加进购物清单"}">${i.buyOn ? "✓ 在清单上" : "需要买"}</button>`;
+function renderAgain(){
+  const activeNames = new Set(items.filter(i => i.status === "in").map(i => i.zh || i.name));
+  const cutoff = addDays(iso(today()), -21), seen = new Set(), list = [];
+  const done = items.filter(i => (i.status === "used" || i.status === "tossed") && (i.doneAt || "") >= cutoff)
+    .sort((a,b) => (b.doneAt || "").localeCompare(a.doneAt || "") || (b.doneTs || 0) - (a.doneTs || 0));
+  for (const i of done){
+    const k = i.zh || i.name;
+    if (seen.has(k) || activeNames.has(k) || isStapleName(k)) continue;
+    seen.add(k); list.push(i); if (list.length >= 16) break;
+  }
+  $("#againList").innerHTML = list.length
+    ? list.map(i => `<div class="grow"><span class="n">${esc(i.zh || i.name)} <span class="mono" style="font-size:11.5px">${i.doneAt ? short(i.doneAt) : ""}</span></span>${buyBtn(i)}</div>`).join("")
+    : `<span class="status">最近 3 周吃完的东西会灰色显示在这里，点「需要买」就进购物清单。</span>`;
+  const inShop = n => shopDocs.some(d => sameName(d.zh, n)) || items.some(i => i.buyOn && sameName(i.zh, n));
+  const tcls = { "常买":"", "时令":"season", "新尝试":"new" };
+  $("#recs").innerHTML = recs.map((r, k) => `<div class="rrow"><span class="qop ${tcls[r.type] ?? ""}">${esc(r.type || "推荐")}</span>
+    <span class="n">${esc(r.zh)} <span class="de">${esc(r.de || "")}</span><br><span class="status">${esc(r.why || "")}</span></span>
+    ${inShop(r.zh) ? `<span class="status">已在清单</span>` : `<button class="btn" data-rec="${k}">+ 要买</button>`}</div>`).join("");
+}
+$("#recBtn").onclick = async () => {
+  if (!sample){ alertStatus("#recStatus", "需要在 Claude 里打开这个页面才能推荐"); return; }
+  const stats = {};
+  for (const i of items){ const k = i.zh || i.name; if (!k) continue; const s = (stats[k] ||= { n:0, t:0 }); s.n++; if (i.status === "tossed") s.t++; }
+  const hist = Object.entries(stats).sort((a,b) => b[1].n - a[1].n).slice(0, 60).map(([k, s]) => `${k}：买过 ${s.n} 次${s.t ? `，扔过 ${s.t} 次` : ""}`).join("\n") || "（还没有记录）";
+  const rc = {}; for (const p of purchases) for (const it of (p.items || [])) if (it.n) rc[it.n] = (rc[it.n] || 0) + 1;
+  const rhist = Object.entries(rc).sort((a,b) => b[1] - a[1]).slice(0, 80).map(([k, n]) => `${k}×${n}`).join("、") || "无";
+  const now = items.filter(i => i.status === "in").map(i => i.zh || i.name).join("、") || "无";
+  const want = [...shopDocs.map(d => d.zh), ...items.filter(i => i.buyOn).map(i => i.zh)].join("、") || "无";
+  const prompt = `今天是 ${iso(today())}，我们住在瑞士苏黎世，家里${familyText(iso(today()))}。
+过去买过的食材：
+${hist}
+Migros/Coop 超市收据里近几个月买过的（德语原名×次数，最能代表我们的饮食习惯）：${rhist}
+现在冰箱里有：${now}
+常备品：${staples.map(s => s.zh).join("、") || "无"}
+已在购物清单：${want}
+
+推荐 6-8 样这次值得买的食材：
+- 大约一半是我们常吃、现在冰箱里没有的（type "常买"）；扔过的东西少推荐或建议买少一点。
+- 其余是瑞士 ${today().getMonth() + 1} 月当季的时令食材（type "时令"），或我们没买过、健康、适合小朋友的（type "新尝试"）。
+- 不要推荐冰箱里已有的、常备品和已在购物清单上的。在 Coop/Migros 容易买到。
+只回复 JSON 数组：[{"zh":"南瓜","de":"Kürbis","type":"时令","why":"10 月当季，蒸软压泥适合宝宝"}]，why 不超过 20 个字。`;
+  $("#recBtn").disabled = true; alertStatus("#recStatus", "正在想…（十几秒）", false);
+  try{
+    const res = await sample.json(prompt, { cache:false });
+    recs = (Array.isArray(res) ? res : []).filter(r => r && r.zh).slice(0, 10).map(r => ({ zh:String(r.zh), de:String(r.de || ""), type:String(r.type || ""), why:String(r.why || "") }));
+    alertStatus("#recStatus", recs.length ? "" : "没想出来，再点一次", !recs.length);
+    renderAgain();
+  } catch(e){
+    const m = { not_granted:"需要允许这个页面使用 Claude", rate_limited:"用得太频繁了，过一会儿再试", invalid_json:"结果格式不对，再点一次" };
+    alertStatus("#recStatus", m[e?.code] || "推荐失败，再试一次");
+  }
+  $("#recBtn").disabled = false;
+};
+// ---------- 购买记录 ----------
+let purchMode = "rank", purchShow = 10;
+$("#purchMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; purchMode = b.dataset.v;
+  $("#purchMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderPurch(); };
+const normItem = n => String(n).replace(/\b\d+([.,]\d+)?\s?(g|kg|l|cl|ml|st|stk|x)\b\.?/gi, "").replace(/\s+(offen|PLU)\b.*$/i, "").replace(/\s+\d+([.,]\d+)?%/g, "").replace(/[\s+]+$/, "").replace(/\s{2,}/g, " ").trim();
+function renderPurch(){
+  $("#purchCard").hidden = !purchases.length;
+  if (!purchases.length) return;
+  const dates = purchases.map(p => p.date).filter(Boolean).sort();
+  $("#purchMeta").textContent = `${purchases.length} 张收据 · ${short(dates[0])}–${short(dates.at(-1))}`;
+  if (purchMode === "rank"){
+    const m = {};
+    for (const p of purchases){
+      const seen = new Set();
+      for (const it of (p.items || [])){
+        const k = normItem(it.n); if (!k) continue;
+        const r = (m[k] ||= { n:k, z:"", times:0, spent:0, last:"", src:new Set() });
+        if (!r.z && it.z) r.z = it.z;
+        if (!seen.has(k)){ r.times++; seen.add(k); }
+        r.spent += Number(it.p) || 0;
+        if ((p.date || "") > r.last) r.last = p.date;
+        r.src.add(p.source === "coop" ? "Coop" : "Migros");
+      }
+    }
+    const rows = Object.values(m).sort((a,b) => b.times - a.times || b.spent - a.spent).slice(0, 30);
+    const max = rows[0]?.times || 1;
+    $("#purch").innerHTML = rows.map((r, i) => `<div class="prank"><span class="mono status">${i + 1}</span>
+      <span class="n">${r.z ? `<b style="font-weight:500">${esc(r.z)}</b> ` : ""}<span class="de">${esc(r.n)}</span><br><span class="status" style="font-size:12px">${[...r.src].join("/")} · 最近 ${short(r.last)}</span><div class="bar2"><i style="width:${r.times / max * 100}%"></i></div></span>
+      <span class="mono">${r.times}× <span class="status">CHF ${r.spent.toFixed(2)}</span></span></div>`).join("")
+      + `<p class="status" style="margin:8px 0 0">次数 = 出现在几张收据里；只统计食品。</p>`;
+  } else {
+    const list = [...purchases].sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+    $("#purch").innerHTML = list.slice(0, purchShow).map(p => { const its = p.items || []; const sum = its.reduce((s, it) => s + (Number(it.p) || 0), 0);
+      return `<details class="rcpt"><summary><span class="mono">${short(p.date)}</span><span>${esc(p.store || "")}</span><span class="src">${p.source === "coop" ? "Coop" : "Migros"}</span><span class="status">${its.length} 样 · CHF ${sum.toFixed(2)}</span></summary>
+        <ul>${its.map(it => `<li>${it.z ? `<span style="color:var(--ink)">${esc(it.z)}</span> · ` : ""}${esc(it.n)} <span class="mono">${it.q != null && it.q !== 1 ? esc(it.q) : ""}</span></li>`).join("")}</ul></details>`; }).join("")
+      + (list.length > purchShow ? `<button class="btn ghost" id="purchMore" style="margin-top:6px">再显示 ${Math.min(20, list.length - purchShow)} 张</button>` : "");
+    const mb = $("#purchMore"); if (mb) mb.onclick = () => { purchShow += 20; renderPurch(); };
+  }
+}
+let histMode = "all";
+$("#histFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; histMode = b.dataset.v;
+  $("#histFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); render(); };
+const weekday = s => "日一二三四五六"[parseIso(s).getDay()];
+function renderHist(gone){
+  const used = gone.filter(i => i.status === "used").length, tossed = gone.length - used;
+  const rate = gone.length ? Math.round(tossed / gone.length * 100) : 0;
+  $("#histStat").innerHTML = `
+    <div class="t-used"><span class="status">吃完 gegessen</span><b>${used}</b></div>
+    <div class="t-toss"><span class="status">扔掉 weggeworfen</span><b>${tossed}</b></div>
+    <div><span class="status">浪费率 Verschwendung</span><b>${rate}%</b></div>`;
+  const list = gone.filter(i => histMode === "all" || i.status === histMode);
+  if (!list.length){ $("#hist").innerHTML = `<div class="empty">${gone.length ? "这一类还没有记录" : "在库存里点「✓ 吃完」或「扔掉」后，记录会出现在这里。"}</div>`; return; }
+  const days = {};
+  for (const i of list){ (days[i.doneAt || "无日期"] ||= []).push(i) }
+  $("#hist").innerHTML = Object.entries(days).map(([d, arr]) => `
+    <div class="group"><div class="day-head"><span class="mono">${d.includes("-") ? short(d) : d}</span>${d.includes("-") ? " 周" + weekday(d) : ""}</div>
+    <div class="list">${arr.map(i => {
+      const kept = i.doneAt && i.bought ? Math.round((parseIso(i.doneAt) - parseIso(i.bought)) / 86400000) : null;
+      const late = i.status === "tossed" && i.doneAt && i.expires && i.doneAt > i.expires;
+      return `<div class="item"><div class="stripe" style="background:var(--${i.status === "used" ? "fresh" : "urgent"})"></div>
+        <div class="item-main" style="cursor:default">
+          <span class="item-name">${esc(i.zh || i.name)} <span class="de">${esc(i.de || "")}</span> <span class="tag ${i.status}">${i.status === "used" ? "吃完" : "扔掉"}</span></span>
+          <span class="item-meta">买于 <span class="mono">${i.bought ? short(i.bought) : "?"}</span> → ${i.status === "used" ? "吃完" : "扔掉"} <span class="mono">${i.doneAt ? short(i.doneAt) : "?"}</span>${kept != null ? ` · 放了 <span class="mono">${kept}</span> 天` : ""}${i.qty ? ` · <span class="mono">${esc(i.qty)}</span>` : ""}${late ? " · 已过期" : ""}${i.doneBy ? " · " + esc(nm(i.doneBy)) : ""}</span>
+        </div>
+        <div class="acts"><button class="btn ghost" data-act="restore" data-id="${i.id}">放回</button></div></div>`;
+    }).join("")}</div></div>`).join("");
+}
+function rowHtml(i){
+  const n = daysLeft(i), lv = level(n);
+  return `<div class="item ${lv}">
+    <div class="stripe"></div>
+    <div class="item-main" data-act="toggle" data-id="${i.id}" title="点开：改到期、快吃完了、扔掉">
+      <span class="item-name">${esc(i.zh||i.name)} <span class="de">${esc(i.de||"")}</span>${i.low ? ` <span class="tag low">快吃完</span>` : ""}${i.buyOn ? ` <span class="tag buy">要买${i.buyBy ? " · " + esc(nm(i.buyBy)) : ""}</span>` : ""}</span>
+      <span class="item-meta"><span class="left">${leftText(n)}</span>${i.qty ? ` · <span class="mono">${esc(i.qty)}</span>` : ""}</span>
+    </div>
+    <div class="acts">
+      <button class="btn" data-act="used" data-id="${i.id}" aria-label="吃完了">✓ 吃完</button>
+      ${buyBtn(i)}
+    </div>
+    ${openEdit === i.id ? `<div class="edit">
+      <span>买于 <span class="mono">${short(i.bought)}</span>${i.addedBy ? " · " + esc(nm(i.addedBy)) + "买的" : ""} · 到期 <span class="mono">${short(i.expires)}</span></span>
+      <button class="btn" data-act="minus" data-id="${i.id}">−1 天</button>
+      <button class="btn" data-act="plus" data-id="${i.id}">+1 天</button>
+      <button class="btn" data-act="plus3" data-id="${i.id}">打开了 → 剩 2 天</button>
+      <span class="sep"></span>
+      <button class="btn" data-act="low" data-id="${i.id}" aria-pressed="${!!i.low}">快吃完了</button>
+      <span class="sep"></span>
+      <button class="btn ghost" data-act="tossed" data-id="${i.id}">扔掉</button>
+      ${i.note ? `<span style="flex-basis:100%">${esc(i.note)}</span>` : ""}
+    </div>` : ""}
+  </div>`;
+}
+
+document.addEventListener("change", e => { const c = e.target.dataset?.customColor; if (c) setColor(c, e.target.value) });
+let lastRecipes = [];
+function copyRecipe(k, btn){
+  const r = lastRecipes[k]; if (!r) return;
+  const lines = [`${r.title}${r.de ? "（" + r.de + "）" : ""} · ${r.minutes || "?"} 分钟`];
+  if ((r.uses || []).length) lines.push("用料：" + r.uses.join("、"));
+  if ((r.missing || []).length) lines.push("还要买：" + r.missing.join("、"));
+  (r.steps || []).forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+  lines.push(...kidLines(r));
+  navigator.clipboard.writeText(lines.join("\n")).then(() => {
+    btn.textContent = "已复制 ✓"; setTimeout(() => { btn.textContent = "复制" }, 2000);
+  }).catch(() => {
+    const rg = document.createRange(); rg.selectNodeContents(btn.closest("article"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+    btn.textContent = "已选中，请手动复制";
+  });
+}
+document.addEventListener("click", async e => {
+  const cr = e.target.closest("[data-copy-recipe]");
+  if (cr){ copyRecipe(Number(cr.dataset.copyRecipe), cr); return; }
+  const co = e.target.closest("[data-color-open]");
+  if (co){ colorOpen = colorOpen === co.dataset.colorOpen ? null : co.dataset.colorOpen; render(); return; }
+  const sc = e.target.closest("[data-set-color]");
+  if (sc){ setColor(sc.dataset.catC, sc.dataset.setColor); return; }
+  const qk = e.target.closest("[data-quick]");
+  if (qk){ if (qk.dataset.quick === "ok") applyQuick(); else { quickActions = []; renderQuick(); alertStatus("#quickStatus", "", false) } return; }
+  const qr = e.target.closest("[data-q-rm]");
+  if (qr){ quickActions.splice(Number(qr.dataset.qRm), 1); renderQuick(); return; }
+  const rm = e.target.closest("[data-staple-rm]");
+  if (rm){ const k = Number(rm.dataset.stapleRm); staples = staples.filter((_, j) => j !== k); saveStaples(); render(); return; }
+  const st = e.target.closest("[data-staple]");
+  if (st){ if (!stapleEditing) toggleStaple(staples[Number(st.dataset.staple)]); return; }
+  const rc = e.target.closest("[data-rec]");
+  if (rc){ const r = recs[Number(rc.dataset.rec)]; if (r){ rc.disabled = true; await addShop(r.zh, r.de, iso(today())); } return; }
+  const sd = e.target.closest("[data-shop-done]");
+  if (sd){ if (db) db.collection("shop").doc(sd.dataset.shopDone).delete().catch(() => {}); return; }
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const it = items.find(x => x.id === b.dataset.id); if (!it) return;
+  const act = b.dataset.act;
+  if (act === "toggle"){ openEdit = openEdit === it.id ? null : it.id; render(); return; }
+  if (!db) return;
+  const ref = db.collection("items").doc(it.id);
+  const patch =
+    act === "used" ? {status:"used", doneAt: iso(today()), doneTs: Date.now()} :
+    act === "tossed" ? {status:"tossed", doneAt: iso(today()), doneTs: Date.now()} :
+    act === "restore" ? {status:"in", doneAt: "", doneTs: 0} :
+    act === "minus" ? {expires: addDays(it.expires,-1)} :
+    act === "plus" ? {expires: addDays(it.expires,1)} :
+    act === "plus3" ? {expires: addDays(iso(today()),2), note: "已开封"} :
+    act === "low" ? {low: !it.low} :
+    act === "buyToday" ? {buyOn: it.buyOn && it.buyOn <= iso(today()) ? "" : iso(today())} :
+    act === "buyTomorrow" ? {buyOn: it.buyOn && it.buyOn > iso(today()) ? "" : addDays(iso(today()),1)} :
+    act === "buyDone" ? {buyOn: ""} :
+    act === "buyCycle" ? {buyOn: it.buyOn ? "" : iso(today())} : null;
+  if (!patch) return;
+  if (act === "used" || act === "tossed") patch.doneBy = myId || "";
+  if (patch.buyOn) patch.buyBy = myId || "";
+  b.disabled = true;
+  try {
+    await ref.update(patch);
+    if (patch.buyOn) logEvent({ type:"buy", name: it.zh || it.name, when: patch.buyOn });
+  } catch(err){ alertStatus("#aiStatus","保存失败，请稍后再试") }
+});
+
+// ---------- db ----------
+(async () => {
+  user = await claude.use("user");
+  myId = user ? await user.id() : null;
+  render();
+})();
+(async () => {
+  db = await claude.use("db");
+  if (!db){ $("#summary").innerHTML = `<span class="chip">库存只在 Claude 里打开时可用</span>`; return; }
+  db.collection("items").onSnapshot(snap => {
+    items = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    render();
+  }, () => { $("#summary").innerHTML = `<span class="chip">无法读取库存，请刷新</span>` });
+  // 动态只保留一周：打开时清掉更早的记录
+  db.collection("log").where("at", "<", Date.now() - 7 * 86400000).limit(200).get()
+    .then(s => s.docs.forEach(d => db.collection("log").doc(d.id).delete().catch(() => {}))).catch(() => {});
+  db.collection("log").orderBy("at", "desc").limit(200).onSnapshot(s => {
+    logs = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }, () => {});
+  db.collection("purchases").orderBy("date", "desc").limit(300).onSnapshot(s => { purchases = s.docs.map(d => d.data()); render(); }, () => {});
+  db.collection("shop").onSnapshot(s => { shopDocs = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, () => {});
+  db.doc("deals/week").onSnapshot(s => { weekDeals = s.exists ? s.data() : null; renderDeals(); }, () => {});
+  db.collection("dealFeedback").onSnapshot(s => { dealFb = s.docs.map(d => ({ id: d.id, ...d.data() })); renderDeals(); }, () => {});
+  db.collection("stockup").onSnapshot(s => { stockup = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, () => {});
+  db.doc("settings/kids").onSnapshot(s => { const l = s.exists ? s.data()?.list : null; kids = Array.isArray(l) ? l : []; renderKids(); }, () => {});
+  db.collection("plans").onSnapshot(s => { plans = s.docs.map(d => ({ id: d.id, ...d.data() })); renderPlans(); }, () => {});
+  // 做菜计划只留两周：打开时清掉更早的
+  db.collection("plans").where("date", "<", addDays(iso(today()), -14)).limit(50).get()
+    .then(s => s.docs.forEach(d => db.collection("plans").doc(d.id).delete().catch(() => {}))).catch(() => {});
+  db.doc("settings/staples").onSnapshot(s => { const l = s.exists ? s.data()?.list : null; if (Array.isArray(l)) { staples = l; render(); } }, () => {});
+  db.doc("settings/layout").onSnapshot(s => {
+    if (!s.exists) return;
+    const d = s.data() || {};
+    layout = { left: Array.isArray(d.left) ? d.left : [], right: Array.isArray(d.right) ? d.right : [], colors: d.colors || {} };
+    render();
+  }, () => {});
+})();
+
+async function saveItems(list){
+  if (!db) return false;
+  for (const it of list){ await db.collection("items").add({ status:"in", doneAt:"", note:"", ...it, addedBy: myId || "" }); await clearShopFor(it.zh) }
+  if (list.length) logEvent({ type:"added", count: list.length, names: list.map(i => i.zh || i.name).slice(0, 30) });
+  return true;
+}
+function alertStatus(sel, msg, err=true){ const el = $(sel); el.textContent = msg; el.classList.toggle("err", err) }
+
+// ---------- 常备品编辑 ----------
+$("#stapleEdit").onclick = () => { stapleEditing = !stapleEditing; render() };
+$("#stapleAdd").onclick = () => {
+  const v = $("#stapleNew").value.trim(); if (!v) return;
+  if (!isStapleName(v)){ staples = [...staples, { zh:v, de:"" }]; saveStaples(); }
+  $("#stapleNew").value = ""; render();
+};
+
+// ---------- 一句话记录 ----------
+$("#quickBtn").onclick = () => runQuick();
+$("#quick").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) runQuick() });
+async function runQuick(){
+  const text = $("#quick").value.trim(); if (!text) { $("#quick").focus(); return; }
+  if (!sample){ alertStatus("#quickStatus", "需要在 Claude 里打开这个页面才能用"); return; }
+  const active = items.filter(i => i.status === "in");
+  const inv = active.map(i => `${i.id} | ${i.zh} | ${i.de || ""} | ${i.qty || ""}`).join("\n") || "（空）";
+  const prompt = `你在帮一个家庭维护冰箱库存。今天是 ${iso(today())}。
+现有库存（id | 中文名 | 德语名 | 数量）：
+${inv}
+常备品（不记库存，只在缺的时候进购物清单）：${staples.map(s => s.zh).join("、") || "无"}
+
+家人说：「${text}」
+
+把这句话拆成操作，只回复一个 JSON 数组。可用操作：
+- {"op":"add","zh":"番茄","de":"Tomaten","cat":"蔬菜","qty":"500 g","shelfDays":7}  新买回来的东西（不是常备品）。cat 取 蔬菜/水果/肉禽鱼/乳制品/蛋/豆制品/零食/主食干货/饮品/冷冻/其他（冷冻食品归冷冻）；1 斤 = 500 g；shelfDays 按家庭冰箱估一个整数。
+- {"op":"bought_staple","zh":"牛奶"}  买回了常备品。
+- {"op":"need","zh":"鸡蛋","de":"Eier","when":"today"}  需要买（没了/缺了/要买）。when 是 today 或 tomorrow，没说就是 today。对应库存里某件时加 "id"。
+- {"op":"used","id":"…"}  库存里某件吃完了。
+- {"op":"tossed","id":"…"}  扔掉了。
+- {"op":"low","id":"…"}  快吃完了。
+规则：「没了」通常同时表示吃完和要买：库存里有就输出 used 和 need 两条，常备品只输出 need。id 只能用上面库存里出现的，对不上就不要用 used/tossed/low。`;
+  $("#quickBtn").disabled = true; alertStatus("#quickStatus", "正在理解…", false);
+  try{
+    const res = await sample.json(prompt, { modelTier:"quick", cache:false });
+    const ids = new Set(active.map(i => i.id));
+    quickActions = (Array.isArray(res) ? res : []).filter(a => a && typeof a.op === "string").filter(a =>
+      a.op === "add" ? !!a.zh :
+      a.op === "bought_staple" ? !!a.zh :
+      a.op === "need" ? !!a.zh && (!a.id || ids.has(a.id)) :
+      ["used","tossed","low"].includes(a.op) ? ids.has(a.id) : false);
+    if (!quickActions.length) alertStatus("#quickStatus", "没听懂，换个说法试试，比如「牛奶没了」「买了番茄」");
+    else alertStatus("#quickStatus", "核对一下，没问题就确认", false);
+    renderQuick();
+  } catch(e){
+    const m = { not_granted:"需要允许这个页面使用 Claude", rate_limited:"用得太频繁了，过一会儿再试", invalid_json:"没理解清楚，再点一次" };
+    alertStatus("#quickStatus", m[e?.code] || "出错了，再试一次");
+  }
+  $("#quickBtn").disabled = false;
+}
+function quickLabel(a){
+  const it = items.find(i => i.id === a.id), nm2 = esc(it ? (it.zh || it.name) : a.zh);
+  if (a.op === "add") return ["新买", "", `${esc(a.zh)}${a.qty ? " " + esc(a.qty) : ""} <span class="de">能放 ${Math.max(1, Math.round(Number(a.shelfDays) || 5))} 天</span>`];
+  if (a.op === "bought_staple") return ["买回常备", "", `${esc(a.zh)} <span class="de">从购物清单划掉</span>`];
+  if (a.op === "need") return ["要买", "need", nm2];
+  if (a.op === "used") return ["吃完", "done", nm2];
+  if (a.op === "tossed") return ["扔掉", "done", nm2];
+  return ["快吃完", "done", nm2];
+}
+function renderQuick(){
+  $("#quickPreview").hidden = !quickActions.length;
+  $("#quickPreview").innerHTML = quickActions.map((a, i) => { const [op, cls, txt] = quickLabel(a);
+    return `<div class="qrow"><span class="qop ${cls}">${op}</span><span class="n">${txt}</span><button class="btn ghost" data-q-rm="${i}" aria-label="去掉这条" style="padding:4px">✕</button></div>`; }).join("")
+    + `<div class="row" style="margin-top:8px"><button class="btn primary" data-quick="ok" id="quickOk">确认</button><button class="btn ghost" data-quick="cancel" style="flex:0 0 auto">取消</button></div>`;
+}
+async function applyQuick(){
+  if (!db || !quickActions.length) return;
+  const acts = quickActions; quickActions = []; renderQuick();
+  alertStatus("#quickStatus", "保存中…", false);
+  const tdy = iso(today()), adds = [];
+  try{
+    for (const a of acts){
+      if (a.op === "add"){
+        const days = Math.max(1, Math.round(Number(a.shelfDays) || 5));
+        adds.push({ name:String(a.zh), zh:String(a.zh), de:String(a.de || ""), cat:String(a.cat || "其他"), qty:String(a.qty || ""), bought:tdy, expires:addDays(tdy, days), store:"" });
+      } else if (a.op === "bought_staple"){
+        await clearShopFor(String(a.zh));
+      } else if (a.op === "need"){
+        const on = tdy;
+        const it = items.find(i => i.id === a.id);
+        if (it){ await db.collection("items").doc(it.id).update({ buyOn:on, buyBy:myId || "" }); logEvent({ type:"buy", name: it.zh || it.name, when:on }); }
+        else { const s = isStapleName(a.zh); await addShop(s ? s.zh : String(a.zh), s ? s.de : String(a.de || ""), on); }
+      } else if (a.op === "used" || a.op === "tossed"){
+        await db.collection("items").doc(a.id).update({ status:a.op, doneAt:tdy, doneTs:Date.now(), doneBy:myId || "" });
+      } else if (a.op === "low"){
+        await db.collection("items").doc(a.id).update({ low:true });
+      }
+    }
+    if (adds.length) await saveItems(adds);
+    $("#quick").value = "";
+    alertStatus("#quickStatus", `已记下 ${acts.length} 条`, false);
+  } catch(e){ alertStatus("#quickStatus", "有一部分没保存上，请检查后重试") }
+}
+
+// ---------- 复制今日清单 ----------
+$("#copyBtn").onclick = async () => {
+  const tdy = iso(today());
+  const active = items.filter(i => i.status === "in").sort((a,b) => daysLeft(a) - daysLeft(b));
+  const urgent = active.filter(i => daysLeft(i) <= 1), rest = active.filter(i => daysLeft(i) > 1);
+  const byCat = {}; for (const i of rest) (byCat[normCat(i.cat)] ||= []).push(i);
+  const need = [...items.filter(i => i.buyOn), ...shopDocs.filter(d => d.buyOn)].map(x => `${x.zh || x.name}`);
+  const lines = [`冰箱清单 ${short(tdy)}`];
+  if (urgent.length) lines.push("", "今明两天要吃：" + urgent.map(i => (i.zh || i.name) + (i.qty ? " " + i.qty : "")).join("、"));
+  if (rest.length){ lines.push("", "冰箱里还有："); for (const [c, l] of Object.entries(byCat)) lines.push(`${c}：${l.map(i => i.zh || i.name).join("、")}`); }
+  if (need.length) lines.push("", "要买：" + need.join("、"));
+  if (stockup.length) lines.push("", "碰到打折就囤：" + stockup.map(d => `${d.zh}${d.want ? " " + d.want : ""}（${d.deal || "打折"}${d.store && d.store !== "哪家都行" ? "，" + d.store : ""}）`).join("、"));
+  const text = lines.join("\n");
+  try { await navigator.clipboard.writeText(text); $("#copyText").hidden = true; $("#copyStatus").hidden = true;
+    const b = $("#copyBtn"); b.textContent = "已复制 ✓"; setTimeout(() => { b.textContent = "复制清单" }, 2000); }
+  catch(e){ const t = $("#copyText"); t.value = text; t.hidden = false; t.style.minHeight = "160px"; t.select(); $("#copyStatus").hidden = false; $("#copyStatus").textContent = "请手动复制下面的文字"; }
+};
+
+// ---------- manual add ----------
+$("#mAdd").onclick = async () => {
+  const name = $("#mName").value.trim(); if (!name) { $("#mName").focus(); return; }
+  const days = Math.max(1, Number($("#mDays").value) || 5), bought = iso(today());
+  if (isStapleName(name)){ await clearShopFor(name); $("#mName").value = ""; alertStatus("#aiStatus", `${name} 是常备品，不记库存，已从购物清单划掉`, false); return; }
+  $("#mAdd").disabled = true;
+  try{
+    await saveItems([{ name, zh:name, de:"", cat:$("#mCat").value, qty:$("#mQty").value.trim(), bought, expires:addDays(bought, days), store:"" }]);
+    $("#mName").value = ""; $("#mQty").value = "";
+    alertStatus("#aiStatus", `已加入：${name}`, false);
+  } catch(e){ alertStatus("#aiStatus","保存失败，请稍后再试") }
+  $("#mAdd").disabled = false;
+};
+
+// ---------- AI parse ----------
+const PARSE_RULES = d => `你在帮一个住在苏黎世的家庭记录买回来的食材（冰箱库存）。
+购买日期：${d}。
+把输入（超市收据照片或文字清单）整理成食材条目。规则：
+- 只收食品和饮料；忽略购物袋、押金、折扣行、合计、支付信息。
+- 瑞士收据名称常是缩写德语（如 "Pouletschenkelsteak" = 鸡腿排, "Vollmilch past" = 巴氏全脂奶, "Hausmischung Bohnen" = 咖啡豆）。
+- 每条给出：name(原文)、zh(简短中文名)、de(标准德语名，如 "Milch")、cat(蔬菜/水果/肉禽鱼/乳制品/蛋/豆制品/零食/主食干货/饮品/冷冻/其他 之一；薯片饼干巧克力等归零食，咖啡茶果汁归饮品，冷冻虾、冷冻蔬菜、冰淇淋等冷冻食品归冷冻且 shelfDays 约 60)、qty(如 "2 盒"、"0.57 kg"；收据中重量列是 kg)、shelfDays(按家庭冰箱或常温正常储存，从购买日起大约能放几天的整数；生鲜肉禽 2，巴氏奶 7，香蕉 5，苹果 21，鸡蛋 21，咖啡豆 60 等)、note(一句储存提示，可空)。
+- 家里的常备品：${staples.map(s => s.zh).join("、") || "无"}。如果某条属于其中之一（例如任何全脂/低脂牛奶都算「牛奶」），加字段 staple 写对应的常备品名；否则 staple 为空字符串。
+只回复一个 JSON 数组，例如：[{"name":"Bio Tofu nature","zh":"有机老豆腐","de":"Tofu","cat":"豆制品","qty":"1 盒","shelfDays":7,"note":"开封后泡水冷藏 2-3 天"}]`;
+
+(async () => {
+  sample = await claude.use("sample");
+  if (!sample){ $("#aiCard").hidden = true; $("#cookBtn").disabled = true; alertStatus("#cookStatus","菜谱推荐需要在 Claude 里打开这个页面"); return; }
+  const lim = await sample.limits().catch(() => null);
+  if (!lim?.images) $("#photo").closest(".file").hidden = true;
+})();
+
+let photoFile = null;
+$("#photo").onchange = e => { photoFile = e.target.files[0] || null; if (photoFile) runParse(); };
+$("#parseBtn").onclick = () => runParse();
+
+async function runParse(){
+  if (!sample) return;
+  const text = $("#freetext").value.trim();
+  if (!photoFile && !text){ alertStatus("#aiStatus","先选一张收据照片，或写下买了什么"); return; }
+  const d = $("#buyDate").value || iso(today());
+  $("#parseBtn").disabled = true; alertStatus("#aiStatus","正在识别…", false);
+  try{
+    const input = PARSE_RULES(d) + (photoFile ? "\n\n图片是一张超市收据。" : "") + (text ? `\n\n文字清单：\n${text}` : "");
+    const res = await sample.json(input, photoFile ? { images:[photoFile] } : {});
+    parsed = (Array.isArray(res) ? res : []).filter(r => r && (r.zh || r.name)).map(r => ({
+      name:String(r.name||r.zh), zh:String(r.zh||r.name), de:String(r.de||""), cat:String(r.cat||"其他"),
+      qty:String(r.qty||""), shelfDays:Math.max(1, Math.round(Number(r.shelfDays)||5)), note:String(r.note||""),
+      staple: isStapleName(r.staple) ? isStapleName(r.staple).zh : ""
+    }));
+    if (!parsed.length){ alertStatus("#aiStatus","没认出食材，换张清晰点的照片，或直接打字试试"); }
+    else { alertStatus("#aiStatus", `认出 ${parsed.length} 样，核对一下保存天数`, false); }
+    renderPreview();
+  } catch(e){
+    const m = { not_granted:"需要允许这个页面使用 Claude 才能识别", rate_limited:"用得太频繁了，过一会儿再试", image_rejected:"这张图片读不了，换一张 JPG/PNG", invalid_json:"识别结果格式不对，再点一次识别" };
+    alertStatus("#aiStatus", m[e?.code] || "识别失败，再试一次");
+  }
+  $("#parseBtn").disabled = false; photoFile = null; $("#photo").value = "";
+}
+function renderPreview(){
+  $("#preview").hidden = $("#saveRow").hidden = !parsed.length;
+  $("#preview").innerHTML = `<div class="prow status"><span>食材</span><span>能放(天)</span><span></span></div>` + parsed.map((p,i) => `
+    <div class="prow"><span class="n">${esc(p.zh)} <span class="de">${esc(p.de)} · ${esc(p.qty)}</span>${p.staple ? ` <span class="tag low">常备品 · 不入库</span>` : ""}</span>
+    <input type="number" min="1" id="pd-${i}" value="${p.shelfDays}" data-i="${i}" aria-label="${esc(p.zh)} 能放几天">
+    <button class="btn ghost" data-rm="${i}" aria-label="删除" style="padding:4px">✕</button></div>`).join("");
+}
+$("#preview").addEventListener("input", e => { const i = e.target.dataset.i; if (i != null) parsed[i].shelfDays = Math.max(1, Number(e.target.value)||1) });
+$("#preview").addEventListener("click", e => { const i = e.target.dataset.rm; if (i != null){ parsed.splice(Number(i),1); renderPreview(); } });
+$("#clearBtn").onclick = () => { parsed = []; $("#freetext").value = ""; renderPreview(); alertStatus("#aiStatus","",false) };
+$("#saveBtn").onclick = async () => {
+  const bought = $("#buyDate").value || iso(today());
+  $("#saveBtn").disabled = true;
+  try{
+    const keep = parsed.filter(p => !p.staple), st = parsed.filter(p => p.staple);
+    await saveItems(keep.map(p => ({ name:p.name, zh:p.zh, de:p.de, cat:p.cat, qty:p.qty, note:p.note, bought, expires:addDays(bought, p.shelfDays), store:"" })));
+    for (const p of st) await clearShopFor(p.staple);
+    alertStatus("#aiStatus", `已放进冰箱：${keep.length} 样${st.length ? `；常备品 ${st.length} 样已从购物清单划掉` : ""}`, false);
+    parsed = []; $("#freetext").value = ""; renderPreview(); showTab("stock");
+  } catch(e){ alertStatus("#aiStatus","保存失败，请稍后再试") }
+  $("#saveBtn").disabled = false;
+};
+
+// ---------- recipes ----------
+$("#mode").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("#mode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)) };
+$("#cookBtn").onclick = async () => {
+  if (!sample) return;
+  const active = items.filter(i => i.status === "in").sort((a,b) => daysLeft(a)-daysLeft(b));
+  if (!active.length){ alertStatus("#cookStatus","库存是空的，先添加食材"); return; }
+  const mode = $("#mode [aria-pressed=true]").dataset.v, extra = $("#extra").value.trim();
+  const inv = active.map(i => `- ${i.zh}（${i.de||i.name}）${i.qty?" "+i.qty:""}：${leftText(daysLeft(i))}${i.note?"，"+i.note:""}`).join("\n");
+  const prompt = `家里冰箱现有食材（按到期先后排列）：
+${inv}
+常备品（家里一般都有）：${staples.filter(s => !shopDocs.find(d => sameName(d.zh, s.zh))).map(s => s.zh).join("、") || "无"}
+
+请推荐 3 道菜。场景：${mode}。${extra ? "补充要求：" + extra + "。" : ""}
+要求：
+- 优先用掉 3 天内到期的食材；主要用现有食材，可以假设家里有油盐酱油醋葱姜蒜面粉米面等常备调料主食。
+- 家里${familyText(iso(today()))}。
+${kidRule(iso(today()))}
+- 菜名用中文，另给德语菜名。
+只回复 JSON 数组，每项：{"title":"番茄炒蛋","de":"Rührei mit Tomaten","minutes":15,"uses":["鸡蛋","番茄"],"missing":["番茄"],"steps":["…","…"],"kids":[{"name":"…","tip":"…"}]}，uses 写库存里的中文名，missing 写库存里没有但需要买的（可空数组），steps 3-6 步。`;
+  $("#cookBtn").disabled = true; alertStatus("#cookStatus","正在想菜谱…（大约半分钟）", false); $("#recipes").innerHTML = "";
+  try{
+    const list = await sample.json(prompt, { cache:false });
+    const urgentNames = new Set(active.filter(i => daysLeft(i) <= 3).map(i => i.zh));
+    lastRecipes = Array.isArray(list) ? list : [];
+    $("#recipes").innerHTML = lastRecipes.map((r, k) => `
+      <article class="card recipe">
+        <div class="hrow"><div><h3>${esc(r.title)}</h3><span class="de">${esc(r.de||"")} · <span class="mono">${esc(r.minutes||"?")} min</span></span></div><button class="btn mini" data-copy-recipe="${k}">复制</button></div>
+        <div class="uses">${(r.uses||[]).map(u => `<span class="${urgentNames.has(u)?"u":""}">${esc(u)}</span>`).join("")}</div>
+        ${(r.missing||[]).length ? `<div class="status">还需要买：${(r.missing||[]).map(esc).join("、")}</div>` : ""}
+        <ol>${(r.steps||[]).map(s => `<li>${esc(s)}</li>`).join("")}</ol>
+        ${kidHtml(r)}
+      </article>`).join("");
+    alertStatus("#cookStatus","红色标签是快过期的食材。做完后回库存点「✓ 吃完」。", false);
+  } catch(e){
+    const m = { not_granted:"需要允许这个页面使用 Claude 才能推荐", rate_limited:"用得太频繁了，过一会儿再试", invalid_json:"结果格式不对，再点一次" };
+    alertStatus("#cookStatus", m[e?.code] || "推荐失败，再试一次");
+  }
+  $("#cookBtn").disabled = false;
+};
+
+// ---------- 做菜计划 Menüplan ----------
+const WK = ["周日","周一","周二","周三","周四","周五","周六"];
+const WK_DE = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const dayDiff = s => Math.round((parseIso(s) - today()) / 86400000);
+const whenText = s => { const n = dayDiff(s); return n === 0 ? "今天" : n === 1 ? "明天" : n === 2 ? "后天" : n < 0 ? `${-n} 天前` : `${n} 天后`; };
+const onList = zh => shopDocs.some(d => sameName(d.zh, zh)) || items.some(i => i.buyOn && sameName(i.zh, zh));
+const buyDayFor = date => { const d = addDays(date, -1), t = iso(today()); return d < t ? t : d; };
+let planOpen = {};
+$("#planDate").value = addDays(iso(today()), 1);
+$("#planDate").min = iso(today());
+
+$("#planBtn").onclick = async () => {
+  if (!sample){ alertStatus("#planStatus", "需要在 Claude 里打开这个页面才能用"); return; }
+  if (!db){ alertStatus("#planStatus", "库存读不到，刷新后再试"); return; }
+  const date = $("#planDate").value || addDays(iso(today()), 1);
+  if (date < iso(today())){ alertStatus("#planStatus", "日期已经过了，选今天或以后"); return; }
+  const meal = $("#planMeal").value, ask = $("#planDishes").value.trim(), off = dayDiff(date);
+  const active = items.filter(i => i.status === "in").sort((a,b) => daysLeft(a) - daysLeft(b));
+  const inv = active.map(i => { const left = daysLeft(i) - off;
+    return `- ${i.zh}（${i.de || i.name || ""}）${i.qty ? " " + i.qty : ""}：到那天${left < 0 ? "已过期，不能用" : left === 0 ? "当天到期" : `还剩 ${left} 天`}${i.note ? "，" + i.note : ""}`; }).join("\n") || "（冰箱是空的）";
+  const stap = staples.filter(s => !shopDocs.find(d => sameName(d.zh, s.zh))).map(s => s.zh).join("、") || "无";
+  const prompt = `我计划在 ${date}（${WK[parseIso(date).getDay()]}，${off === 0 ? "今天" : off + " 天后"}）做${meal}，${familyText(date)}。
+${ask ? `想做的菜：${ask}。每道都要给菜谱，不要换菜。` : `没指定菜，请按冰箱库存推荐 2 道搭配好的菜（一荤一素或主食+菜），优先用掉到那天快过期的。`}
+
+冰箱库存（到那天的状态）：
+${inv}
+常备品（家里一般都有）：${stap}
+可以假设家里有油、盐、糖、酱油、醋、料酒、葱姜蒜、面粉、大米、淀粉这些基础调料主食，它们不用列进要买的东西。
+
+要求：
+- 每道菜给完整用料，份量按这一家人一顿。
+- 用料里库存有、到那天还没过期、量也够的，have 为 true，from 写库存里的中文名；库存没有、过期或量不够的，have 为 false，qty 写需要买多少。
+- 买的东西写中文名 + 瑞士超市（Migros/Coop）里常见的德语名。
+${kidRule(date)}
+- steps 4-8 步，写清火候和时间。
+只回复 JSON：{"dishes":[{"title":"红烧排骨","de":"Geschmorte Schweinerippchen","minutes":60,"ingredients":[{"zh":"猪肋排","de":"Schweinsrippli","qty":"600 g","have":false,"from":""},{"zh":"胡萝卜","de":"Rüebli","qty":"1 根","have":true,"from":"胡萝卜"}],"steps":["…"],"kids":[{"name":"…","tip":"…"}]}]}`;
+  $("#planBtn").disabled = true; alertStatus("#planStatus", "正在写菜谱、对库存…（大约半分钟）", false);
+  try {
+    const res = await sample.json(prompt, { cache:false });
+    const dishes = (Array.isArray(res?.dishes) ? res.dishes : Array.isArray(res) ? res : []).filter(d => d && d.title);
+    if (!dishes.length) throw { code:"empty" };
+    const ref = await db.collection("plans").add({ date, meal, ask, dishes, by: myId || "", at: Date.now() });
+    planOpen[ref.id] = true;
+    $("#planDishes").value = "";
+    const need = new Set(dishes.flatMap(d => (d.ingredients || []).filter(x => !x.have).map(x => x.zh)));
+    alertStatus("#planStatus", need.size ? `好了。要买 ${need.size} 样，点下面「加进购物清单」。` : "好了。库存都够，不用买东西。", false);
+  } catch(e){
+    const m = { not_granted:"需要允许这个页面使用 Claude 才能生成", rate_limited:"用得太频繁了，过一会儿再试", invalid_json:"结果格式不对，再点一次", empty:"没生成出菜谱，换个说法再试" };
+    alertStatus("#planStatus", m[e?.code] || "生成失败，再试一次");
+  }
+  $("#planBtn").disabled = false;
+};
+
+function planNeeds(p){
+  const map = new Map();
+  for (const d of p.dishes || []) for (const x of d.ingredients || []) if (!x.have && x.zh){
+    const k = x.zh.trim().toLowerCase(), cur = map.get(k);
+    if (cur){ if (x.qty && !cur.qty.includes(x.qty)) cur.qty.push(x.qty); if (!cur.for.includes(d.title)) cur.for.push(d.title); }
+    else map.set(k, { zh: x.zh, de: x.de || "", qty: x.qty ? [x.qty] : [], for: [d.title] });
+  }
+  return [...map.values()];
+}
+function planLabel(p){ const d = parseIso(p.date); return `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${p.meal || ""}`.trim(); }
+
+function renderPlans(){
+  const el = $("#plans"); if (!el) return;
+  const t = iso(today());
+  const list = plans.filter(p => p.date >= t).sort((a,b) => a.date.localeCompare(b.date) || (a.at||0) - (b.at||0));
+  if (!list.length){ el.innerHTML = db ? `<div class="empty" style="padding:10px">还没有计划。选一天、写想做的菜，生成后家人都能看到，要买的东西一键进购物清单。</div>` : ""; return; }
+  el.innerHTML = list.map(p => {
+    const d = parseIso(p.date), needs = planNeeds(p), open = planOpen[p.id] ?? dayDiff(p.date) <= 1;
+    const missing = needs.filter(n => !onList(n.zh));
+    const dishHtml = (p.dishes || []).map((r, k) => `<div class="plan-dish">
+        <div class="hrow"><div><b>${esc(r.title)}</b> <span class="de">${esc(r.de || "")} · <span class="mono">${esc(r.minutes || "?")} min</span></span></div><button class="btn mini" data-plan-copy="${p.id}:${k}">复制</button></div>
+        <div class="ings">${(r.ingredients || []).map(x => `<span class="${x.have ? "ok" : "need"}" title="${x.have ? "冰箱里有" : "要买"}">${x.have ? "✓ " : ""}${esc(x.zh)}${x.qty ? " " + esc(x.qty) : ""}</span>`).join("")}</div>
+        ${open ? `<ol>${(r.steps || []).map(s => `<li>${esc(s)}</li>`).join("")}</ol>${kidHtml(r)}` : ""}
+      </div>`).join("");
+    const buyHtml = needs.length ? `<div class="plan-buy">
+        <div class="hrow"><span class="status">要买 Einkaufen · <span class="mono">${needs.length}</span> 样${missing.length ? "" : " · 都已在清单上"}</span>
+        ${missing.length ? `<button class="btn primary mini" data-plan-shop="${p.id}">全部加进购物清单（${short(buyDayFor(p.date))} 买）</button>` : ""}</div>
+        ${needs.map(n => `<div class="srow"><span class="n">${esc(n.zh)} <span class="de">${esc(n.de)}</span>${n.qty.length ? ` <span class="status mono">${esc(n.qty.join(" + "))}</span>` : ""}</span>
+          <span class="status">${esc(n.for.join("、"))}</span>
+          ${onList(n.zh) ? `<span class="tag buy2">✓ 在清单</span>` : `<button class="btn mini" data-plan-one="${p.id}" data-zh="${esc(n.zh)}">加</button>`}</div>`).join("")}
+      </div>` : `<div class="status">✓ 冰箱里的东西都够，不用买。</div>`;
+    return `<article class="card recipe">
+      <div class="plan-head">
+        <span class="plan-date">${pad(d.getMonth()+1)}/${pad(d.getDate())} ${WK[d.getDay()]} <span class="de" style="font-weight:400">${WK_DE[d.getDay()]}</span> · ${esc(p.meal || "")}</span>
+        <span class="status">${whenText(p.date)}${p.by ? " · " + esc(nm(p.by)) + "定的" : ""}</span>
+      </div>
+      ${dishHtml}
+      ${buyHtml}
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn ghost mini" data-plan-toggle="${p.id}" style="flex:0 0 auto">${open ? "收起步骤" : "看步骤"}</button>
+        <button class="btn ghost mini" data-plan-del="${p.id}" style="flex:0 0 auto">删除计划</button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+document.addEventListener("click", async e => {
+  const tg = e.target.closest("[data-plan-toggle]");
+  if (tg){ const id = tg.dataset.planToggle, p = plans.find(x => x.id === id); planOpen[id] = !(planOpen[id] ?? (p && dayDiff(p.date) <= 1)); renderPlans(); return; }
+  const del = e.target.closest("[data-plan-del]");
+  if (del){
+    if (del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "再点一次确认删除"; setTimeout(() => { if (del.isConnected){ del.dataset.armed = ""; del.textContent = "删除计划"; } }, 3000); return; }
+    if (db) db.collection("plans").doc(del.dataset.planDel).delete().catch(() => {}); return;
+  }
+  const all = e.target.closest("[data-plan-shop]"), one = e.target.closest("[data-plan-one]");
+  if (all || one){
+    const p = plans.find(x => x.id === (all || one).dataset[all ? "planShop" : "planOne"]); if (!p) return;
+    (all || one).disabled = true;
+    const list = planNeeds(p).filter(n => !onList(n.zh) && (all || sameName(n.zh, one.dataset.zh)));
+    for (const n of list) await addShop(n.zh, n.de, buyDayFor(p.date), { forPlan: `${planLabel(p)} ${n.for.join("、")}`, qty: n.qty.join(" + "), planId: p.id }).catch(() => {});
+    alertStatus("#planStatus", list.length ? `加了 ${list.length} 样到购物清单，在「库存」页最上面。` : "都已经在清单上了。", false);
+    return;
+  }
+  const cp = e.target.closest("[data-plan-copy]");
+  if (cp){
+    const [id, k] = cp.dataset.planCopy.split(":"), p = plans.find(x => x.id === id), r = p?.dishes?.[Number(k)]; if (!r) return;
+    const lines = [`${r.title}${r.de ? "（" + r.de + "）" : ""} · ${r.minutes || "?"} 分钟 · ${planLabel(p)}`,
+      "用料：" + (r.ingredients || []).map(x => `${x.zh}${x.qty ? " " + x.qty : ""}${x.have ? "" : "（要买）"}`).join("、")];
+    (r.steps || []).forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    lines.push(...kidLines(r));
+    navigator.clipboard.writeText(lines.join("\n")).then(() => { cp.textContent = "已复制 ✓"; setTimeout(() => { cp.textContent = "复制" }, 2000); })
+      .catch(() => { const rg = document.createRange(); rg.selectNodeContents(cp.closest(".plan-dish")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg); cp.textContent = "已选中，请手动复制"; });
+  }
+});
+// ---------- 孩子年龄：按生日自动算，每个月自己长大 ----------
+let kidsEditing = false;
+function renderKids(){
+  const t = iso(today()), l = kidList(t);
+  $("#kidsLine").textContent = l.length ? `按年龄推荐：${l.join(" · ")}` : "还没填孩子生日，点「改生日」，推荐会按月龄调整";
+  $("#kidsEdit").textContent = kidsEditing ? "收起" : "改生日";
+  const f = $("#kidsForm"); f.hidden = !kidsEditing;
+  if (!kidsEditing) return;
+  const rows = kids.length ? kids : [{ name:"", born:"" }];
+  f.innerHTML = rows.map((k, i) => `<div class="row">
+      <input id="kidName${i}" value="${esc(k.name || "")}" placeholder="名字" style="flex:1 1 90px" aria-label="孩子名字">
+      <input id="kidBorn${i}" type="date" value="${esc(k.born || "")}" max="${t}" style="flex:1 1 140px" aria-label="生日">
+      <button class="btn ghost mini" data-kid-rm="${i}" style="flex:0 0 auto">删</button></div>`).join("")
+    + `<div class="row"><button class="btn mini" id="kidAdd" style="flex:0 0 auto">加一个孩子</button><button class="btn primary mini" id="kidSave" style="flex:0 0 auto">保存</button></div>`;
+}
+const readKidForm = () => [...document.querySelectorAll('#kidsForm input[id^="kidName"]')].map((n, i) => ({ name: n.value.trim(), born: $("#kidBorn" + i).value }));
+$("#kidsEdit").onclick = () => { kidsEditing = !kidsEditing; renderKids(); };
+document.addEventListener("click", e => {
+  if (e.target.id === "kidAdd"){ kids = [...readKidForm(), { name:"", born:"" }]; renderKids(); return; }
+  const rm = e.target.closest("[data-kid-rm]");
+  if (rm){ kids = readKidForm().filter((_, j) => j !== Number(rm.dataset.kidRm)); renderKids(); return; }
+  if (e.target.id === "kidSave"){
+    kids = readKidForm().filter(k => k.born);
+    if (db) db.doc("settings/kids").set({ list: kids }).catch(() => alertStatus("#planStatus", "生日没保存上，再点一次"));
+    kidsEditing = false; renderKids();
+  }
+});
+renderKids();
+// ---------- 打折就囤 Bei Aktion ----------
+document.addEventListener("click", async e => {
+  if (e.target.id === "stockupOpen"){ showTab("deals"); return; }
+  if (e.target.id === "stockupEdit"){ stockupEditing = !stockupEditing; stockupEditId = null; render(); if (stockupEditing) setTimeout(() => $("#suName")?.focus(), 0); return; }
+  const ed = e.target.closest("[data-stock-edit]");
+  if (ed){ stockupEditId = ed.dataset.stockEdit; render(); setTimeout(() => $("#seDeal")?.focus(), 0); return; }
+  if (e.target.closest("[data-stock-cancel]")){ stockupEditId = null; render(); return; }
+  const sv = e.target.closest("[data-stock-save]");
+  if (sv){
+    const id = sv.dataset.stockSave, cur = stockup.find(d => d.id === id); if (!cur || !db) return;
+    const zh = $("#seName").value.trim(), want = $("#seWant").value.trim(), deal = $("#seDeal").value.trim(), store = $("#seStore").value;
+    if (!zh){ $("#seName").focus(); return; }
+    if (stockup.some(d => d.id !== id && sameName(d.zh, zh))){ $("#seName").focus(); $("#seName").select(); return; }
+    const patch = { zh, want, deal, store, editedBy: myId || "", editedAt: Date.now() };
+    // 条件变了，上次查到的折扣结果就不作数了，等下次自动检查重新算
+    if (zh !== cur.zh || want !== (cur.want || "") || deal !== (cur.deal || "") || store !== (cur.store || "")) patch.dealNow = null;
+    sv.disabled = true;
+    try { await db.collection("stockup").doc(id).update(patch); stockupEditId = null; render(); }
+    catch(err){ sv.disabled = false; sv.textContent = "没保存上，再点一次"; }
+    return;
+  }
+  if (e.target.id === "suAdd"){
+    const zh = $("#suName").value.trim(), want = $("#suWant").value.trim(), deal = $("#suDeal").value.trim(), store = $("#suStore").value;
+    if (!zh){ $("#suName").focus(); return; }
+    if (!db || stockup.some(d => sameName(d.zh, zh))) { $("#suName").value = ""; return; }
+    e.target.disabled = true;
+    await db.collection("stockup").add({ zh, de:"", want, deal, store, lastBought:"", by: myId || "", at: Date.now() }).catch(() => {});
+    $("#suName").value = ""; $("#suWant").value = ""; $("#suDeal").value = ""; e.target.disabled = false; $("#suName").focus();
+    return;
+  }
+  const dn = e.target.closest("[data-stock-done]");
+  if (dn){ if (db) db.collection("stockup").doc(dn.dataset.stockDone).update({ lastBought: iso(today()), boughtBy: myId || "" }).catch(() => {}); return; }
+  const rm = e.target.closest("[data-stock-rm]");
+  if (rm){
+    if (rm.dataset.armed !== "1"){ rm.dataset.armed = "1"; rm.textContent = "确认删除"; return; }
+    if (db) db.collection("stockup").doc(rm.dataset.stockRm).delete().catch(() => {});
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.isComposing) return;
+  if (["suName","suWant","suDeal"].includes(e.target.id)) $("#suAdd")?.click();
+  if (["seName","seWant","seDeal"].includes(e.target.id)) document.querySelector("[data-stock-save]")?.click();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && stockupEditId){ stockupEditId = null; render(); } });
+// ---------- 本周打折值得买：图片 + 反馈 ----------
+let dealFb = [], lastNo = null;
+const dkey = r => r.key || r.product;
+function dealList(){
+  const t = iso(today()), wk = weekDeals?.checkedAt || "";
+  const no = new Set(dealFb.filter(f => f.verdict === "dislike" && f.week === wk).map(f => f.key));
+  const all = [...(weekDeals?.recs || []), ...(weekDeals?.alts || [])].filter(r => r && r.product && (!r.until || r.until >= t));
+  const n = (weekDeals?.recs || []).length || 12;
+  const live = all.filter(r => !no.has(dkey(r)));
+  return { shown: live.slice(0, n), spare: Math.max(0, live.length - n), all };
+}
+function dealCard(r){
+  const zh = r.zh || r.product;
+  const liked = dealFb.some(f => f.verdict === "like" && f.key === dkey(r) && f.week === weekDeals?.checkedAt);
+  const name = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" title="${esc(r.product || "")}">${esc(zh)}</a>` : `<b>${esc(zh)}</b>`;
+  const price = r.price ? `<span class="mono">${esc(r.price)}${esc(r.unit || "")}</span>${r.was ? `<s class="mono">${esc(r.was)}</s>` : ""}${r.off ? `<span class="doff">${esc(r.off)}</span>` : ""}` : `<span>${esc(r.offer || "")}</span>`;
+  const sub = [esc(r.scope || r.shop || ""), r.until ? untilHtml(r.until) : "", esc(r.why || "")].filter(Boolean).join(" · ");
+  return `<div class="dl"><div class="dmain">${name}${price}</div>
+    <div class="dacts">${liked || onList(zh) ? `<span class="status">✓ 已加</span>` : `<button class="btn mini" data-deal-add="${esc(dkey(r))}" title="加进购物清单（算推荐得好）">加入</button>`}<button class="btn ghost mini" data-deal-no="${esc(dkey(r))}" title="不喜欢，换一个">不要</button></div>
+    <div class="dsub">${sub}</div></div>`;
+}
+function renderDeals(){
+  const el = $("#weekDeals"); if (!el) return;
+  el.hidden = false;
+  const head = `<div class="group-head"><h2>本周打折值得买 Aktionen für euch</h2><span class="status">${weekDeals?.checkedAt ? short(weekDeals.checkedAt) + " 查的" : ""}</span></div>`;
+  const { shown, spare } = dealList();
+  if (!shown.length){ el.innerHTML = head + `<div class="status">${weekDeals?.checkedAt ? "这周没有更多合适的推荐了。" : "还没查过。按你们常买的东西，从本周促销里挑值得买的。"}</div>`; return; }
+  el.innerHTML = head
+    + (lastNo ? `<div class="dundo">已去掉「${esc(lastNo.zh)}」<button class="btn ghost mini" id="dealUndo">撤销</button></div>` : "")
+    + `<div class="dlist">${shown.map(dealCard).join("")}</div>`;
+}
+function dealByKey(k){ return dealList().all.find(r => dkey(r) === k); }
+async function dealFeedback(r, verdict){
+  if (!db || !r) return null;
+  return db.collection("dealFeedback").add({ key: dkey(r), week: weekDeals?.checkedAt || "", zh: r.zh || "", de: r.de || "", product: r.product || "", shop: r.shop || "", verdict, by: myId || "", at: Date.now() }).catch(() => null);
+}
+document.addEventListener("click", async e => {
+  if (e.target.id === "dealUndo" && lastNo){ const id = lastNo.id; lastNo = null; if (db && id) await db.collection("dealFeedback").doc(id).delete().catch(() => {}); renderDeals(); return; }
+  const a = e.target.closest("[data-deal-add]");
+  if (a){ const r = dealByKey(a.dataset.dealAdd); if (!r) return; a.disabled = true;
+    await addShop(r.zh || r.product, r.de || "", iso(today()), { forPlan: `打折 ${r.shop || ""}`.trim() }).catch(() => {});
+    await dealFeedback(r, "like"); return; }
+  const n = e.target.closest("[data-deal-no]");
+  if (n){ const r = dealByKey(n.dataset.dealNo); if (!r) return; n.disabled = true;
+    const ref = await dealFeedback(r, "dislike"); lastNo = { zh: r.zh || r.product, id: ref?.id }; renderDeals(); }
+});
+</script>
+
+</body></html>
